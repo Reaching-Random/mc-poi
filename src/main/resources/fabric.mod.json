@@ -1,0 +1,37 @@
+{
+	"schemaVersion": 1,
+	"id": "points-of-interest",
+	"version": "${version}",
+	"name": "POI Tracker",
+	"description": "Track Points of Interest across your Minecraft worlds, synced with reachingrandom.com.",
+	"authors": [
+		"Reaching Random LLC"
+	],
+	"contact": {
+		"homepage": "https://reachingrandom.com/mc/poi/help"
+	},
+	"license": "MIT",
+	"icon": "assets/points-of-interest/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.reachingrandom.mc.poi.Pointsofinterest"
+		],
+		"client": [
+			"com.reachingrandom.mc.poi.PointsofinterestClient"
+		]
+	},
+	"mixins": [
+		"points-of-interest.mixins.json",
+		{
+			"config": "points-of-interest.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.18.5",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
