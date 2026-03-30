@@ -8,7 +8,9 @@ import com.reachingrandom.mc.poi.api.ApiModels;
 import com.reachingrandom.mc.poi.config.PoiConfig;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.level.Level;
@@ -25,6 +27,7 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.lit
 public final class PoiCommand {
 
     private static final String HELP_PATH = "/mc/poi/help";
+    private static final int PAGE_SIZE = 8;
 
     private PoiCommand() {}
 
@@ -38,9 +41,12 @@ public final class PoiCommand {
                 .then(literal("help")
                     .executes(ctx -> executeWorldHelp(ctx.getSource())))
 
-                // /world list
+                // /world list [page]
                 .then(literal("list")
-                    .executes(ctx -> executeWorlds(ctx.getSource())))
+                    .executes(ctx -> executeWorlds(ctx.getSource(), 1))
+                    .then(argument("page", IntegerArgumentType.integer(1))
+                        .executes(ctx -> executeWorlds(ctx.getSource(),
+                                getInteger(ctx, "page")))))
 
                 // /world add [name]
                 .then(literal("add")
@@ -78,16 +84,25 @@ public final class PoiCommand {
                         .executes(ctx -> executeSetKey(ctx.getSource(),
                                 getString(ctx, "key")))))
 
-                // /poi groups
+                // /poi groups [page]
                 .then(literal("groups")
-                    .executes(ctx -> executeGroups(ctx.getSource())))
+                    .executes(ctx -> executeGroups(ctx.getSource(), 1)))
 
-                // /poi list [group#]
+                // /poi list [page]
+                // /poi list group <group#> [page]
                 .then(literal("list")
-                    .executes(ctx -> executeList(ctx.getSource(), 0))
-                    .then(argument("group#", IntegerArgumentType.integer(1))
-                        .executes(ctx -> executeList(ctx.getSource(),
-                                getInteger(ctx, "group#")))))
+                    .executes(ctx -> executeList(ctx.getSource(), 0, 1))
+                    .then(argument("page", IntegerArgumentType.integer(1))
+                        .executes(ctx -> executeList(ctx.getSource(), 0,
+                                getInteger(ctx, "page"))))
+                    .then(literal("group")
+                        .then(argument("group#", IntegerArgumentType.integer(1))
+                            .executes(ctx -> executeList(ctx.getSource(),
+                                    getInteger(ctx, "group#"), 1))
+                            .then(argument("page", IntegerArgumentType.integer(1))
+                                .executes(ctx -> executeList(ctx.getSource(),
+                                        getInteger(ctx, "group#"),
+                                        getInteger(ctx, "page")))))))
 
                 // /poi add <name> [description]
                 .then(literal("add")
@@ -114,7 +129,10 @@ public final class PoiCommand {
             literal("group")
                 .executes(ctx -> executeGroupHelp(ctx.getSource()))
                 .then(literal("list")
-                    .executes(ctx -> executeGroups(ctx.getSource())))
+                    .executes(ctx -> executeGroups(ctx.getSource(), 1))
+                    .then(argument("page", IntegerArgumentType.integer(1))
+                        .executes(ctx -> executeGroups(ctx.getSource(),
+                                getInteger(ctx, "page")))))
                 .then(literal("add")
                     .then(argument("name", StringArgumentType.greedyString())
                         .executes(ctx -> executeNewGroup(ctx.getSource(), getString(ctx, "name")))))
@@ -125,21 +143,27 @@ public final class PoiCommand {
                     .executes(ctx -> executeClearGroup(ctx.getSource())))
         );
 
-        // --- /groups ---
+        // --- /groups [page] ---
         dispatcher.register(
             literal("groups")
-                .executes(ctx -> executeGroups(ctx.getSource()))
+                .executes(ctx -> executeGroups(ctx.getSource(), 1))
+                .then(argument("page", IntegerArgumentType.integer(1))
+                    .executes(ctx -> executeGroups(ctx.getSource(), getInteger(ctx, "page"))))
         );
 
         // --- Aliases ---
         dispatcher.register(
             literal("worlds")
-                .executes(ctx -> executeWorlds(ctx.getSource()))
+                .executes(ctx -> executeWorlds(ctx.getSource(), 1))
+                .then(argument("page", IntegerArgumentType.integer(1))
+                    .executes(ctx -> executeWorlds(ctx.getSource(), getInteger(ctx, "page"))))
         );
 
         dispatcher.register(
             literal("pois")
-                .executes(ctx -> executeList(ctx.getSource(), 0))
+                .executes(ctx -> executeList(ctx.getSource(), 0, 1))
+                .then(argument("page", IntegerArgumentType.integer(1))
+                    .executes(ctx -> executeList(ctx.getSource(), 0, getInteger(ctx, "page"))))
         );
     }
 
@@ -194,7 +218,7 @@ public final class PoiCommand {
 
     // ── /poi worlds ────────────────────────────────────────────────────────────
 
-    private static int executeWorlds(FabricClientCommandSource source) {
+    private static int executeWorlds(FabricClientCommandSource source, int page) {
         if (!checkApiKey(source)) return 0;
 
         String currentSeed = getCurrentSeed();
@@ -235,9 +259,14 @@ public final class PoiCommand {
 
             PoiSession.get().setLastWorldsList(listToShow);
 
+            int totalPages = totalPages(listToShow.size(), PAGE_SIZE);
+            int clampedPage = Math.max(1, Math.min(page, totalPages));
+            List<ApiModels.WorldSummary> pageItems = getPage(listToShow, clampedPage, PAGE_SIZE);
+            int globalOffset = (clampedPage - 1) * PAGE_SIZE;
+
             PoiConfig cfg = PoiConfig.get();
-            for (int i = 0; i < listToShow.size(); i++) {
-                ApiModels.WorldSummary w = listToShow.get(i);
+            for (int i = 0; i < pageItems.size(); i++) {
+                ApiModels.WorldSummary w = pageItems.get(i);
                 boolean isSelected = w.id.equals(cfg.currentWorldId);
                 boolean isSeedMatch = currentSeed != null && currentSeed.equals(w.seed);
 
@@ -246,7 +275,11 @@ public final class PoiCommand {
                 else if (isSelected) marker = " §c[Selected]§r";
                 else if (isSeedMatch) marker = " §b[Seed Match]§r";
 
-                send(source, "  §e" + (i + 1) + ".§r " + w.name + marker);
+                send(source, "  §e" + (globalOffset + i + 1) + ".§r " + w.name + marker);
+            }
+
+            if (totalPages > 1) {
+                sendComponent(source, paginationBar("/world list", clampedPage, totalPages));
             }
         });
         return 1;
@@ -350,7 +383,7 @@ public final class PoiCommand {
 
     // ── /poi groups ────────────────────────────────────────────────────────────
 
-    private static int executeGroups(FabricClientCommandSource source) {
+    private static int executeGroups(FabricClientCommandSource source, int page) {
         if (!checkApiKey(source) || !checkWorldSelected(source)) return 0;
 
         async(source, () -> {
@@ -370,11 +403,21 @@ public final class PoiCommand {
             }
 
             send(source, header("Groups"));
-            for (int i = 0; i < groups.size(); i++) {
-                ApiModels.WorldItem g = groups.get(i);
+
+            int totalPages = totalPages(groups.size(), PAGE_SIZE);
+            int clampedPage = Math.max(1, Math.min(page, totalPages));
+            List<ApiModels.WorldItem> pageItems = getPage(groups, clampedPage, PAGE_SIZE);
+            int globalOffset = (clampedPage - 1) * PAGE_SIZE;
+
+            for (int i = 0; i < pageItems.size(); i++) {
+                ApiModels.WorldItem g = pageItems.get(i);
                 int poiCount = (g.items != null) ? g.items.size() : 0;
                 String marker = (g.id.equals(currentGroupId)) ? " §a[Selected]§r" : "";
-                send(source, "  §e" + (i + 1) + ".§r " + g.name + gray(" (" + poiCount + " POIs)") + marker);
+                send(source, "  §e" + (globalOffset + i + 1) + ".§r " + g.name + gray(" (" + poiCount + " POIs)") + marker);
+            }
+
+            if (totalPages > 1) {
+                sendComponent(source, paginationBar("/group list", clampedPage, totalPages));
             }
         });
         return 1;
@@ -430,7 +473,7 @@ public final class PoiCommand {
 
     // ── /poi list ──────────────────────────────────────────────────────────────
 
-    private static int executeList(FabricClientCommandSource source, int groupNumber) {
+    private static int executeList(FabricClientCommandSource source, int groupNumber, int page) {
         if (!checkApiKey(source)) return 0;
         String worldId = requireCurrentWorld(source);
         if (worldId == null) return 0;
@@ -440,53 +483,84 @@ public final class PoiCommand {
             ApiModels.ItemsResponse resp = api.getItems(worldId);
             List<ApiModels.WorldItem> items = resp.items != null ? resp.items : List.of();
 
-            List<ApiModels.WorldItem> flatPois = new ArrayList<>();
+            // Build the full flat POI list (for /poi track indexing)
+            List<ApiModels.WorldItem> allPois = new ArrayList<>();
+            String pageCmd;
 
             if (groupNumber > 0) {
-                // List POIs inside a specific group
                 ApiModels.WorldItem group = PoiSession.get().getGroupByNumber(groupNumber);
                 if (group == null) {
-                    send(source, err("Invalid group number. Run /poi groups first."));
+                    send(source, err("Invalid group number. Run /group list first."));
                     return;
                 }
                 List<ApiModels.WorldItem> pois = group.items != null ? group.items : List.of();
+                allPois.addAll(pois);
+                pageCmd = "/poi list group " + groupNumber;
                 send(source, header("POIs in: " + group.name));
-                if (pois.isEmpty()) {
-                    send(source, gray("  (empty)"));
-                } else {
-                    for (ApiModels.WorldItem poi : pois) {
-                        flatPois.add(poi);
-                        printPoiLineNumbered(source, flatPois.size(), poi);
-                    }
-                }
             } else {
-                // List everything
-                send(source, header("POIs"));
-                if (items.isEmpty()) {
-                    send(source, gray("No POIs yet. Use /poi add <name> to add one."));
-                    return;
-                }
                 for (ApiModels.WorldItem item : items) {
                     if ("group".equals(item.type)) {
-                        send(source, "  §6[" + item.name + "]");
-                        List<ApiModels.WorldItem> pois = item.items != null ? item.items : List.of();
-                        for (ApiModels.WorldItem poi : pois) {
-                            flatPois.add(poi);
-                            printPoiLineNumbered(source, flatPois.size(), poi);
-                        }
+                        if (item.items != null) allPois.addAll(item.items);
                     } else {
-                        flatPois.add(item);
-                        printPoiLineNumbered(source, flatPois.size(), item);
+                        allPois.add(item);
                     }
+                }
+                pageCmd = "/poi list";
+                send(source, header("POIs"));
+            }
+
+            PoiSession.get().setLastPoiList(allPois);
+
+            if (allPois.isEmpty()) {
+                send(source, gray(groupNumber > 0 ? "  (empty)" : "No POIs yet. Use /poi add <name> to add one."));
+                return;
+            }
+
+            int totalPages = totalPages(allPois.size(), PAGE_SIZE);
+            int clampedPage = Math.max(1, Math.min(page, totalPages));
+            List<ApiModels.WorldItem> pageItems = getPage(allPois, clampedPage, PAGE_SIZE);
+            int globalOffset = (clampedPage - 1) * PAGE_SIZE;
+
+            if (groupNumber == 0) {
+                // Show group headers inline for the all-POIs view
+                String lastGroupName = null;
+                int allIdx = globalOffset;
+                for (ApiModels.WorldItem poi : pageItems) {
+                    String groupName = findGroupName(items, poi);
+                    if (groupName != null && !groupName.equals(lastGroupName)) {
+                        send(source, "  §6[" + groupName + "]");
+                        lastGroupName = groupName;
+                    } else if (groupName == null && lastGroupName != null) {
+                        lastGroupName = null;
+                    }
+                    printPoiLineNumbered(source, allIdx + 1, poi);
+                    allIdx++;
+                }
+            } else {
+                for (int i = 0; i < pageItems.size(); i++) {
+                    printPoiLineNumbered(source, globalOffset + i + 1, pageItems.get(i));
                 }
             }
 
-            PoiSession.get().setLastPoiList(flatPois);
-            if (!flatPois.isEmpty()) {
+            if (totalPages > 1) {
+                sendComponent(source, paginationBar(pageCmd, clampedPage, totalPages));
+            } else {
                 send(source, gray("Use /poi track <#> to show a direction indicator."));
             }
         });
         return 1;
+    }
+
+    /** Returns the group name that contains this POI, or null if it's at root level. */
+    private static String findGroupName(List<ApiModels.WorldItem> items, ApiModels.WorldItem target) {
+        for (ApiModels.WorldItem item : items) {
+            if ("group".equals(item.type) && item.items != null) {
+                for (ApiModels.WorldItem child : item.items) {
+                    if (child == target) return item.name;
+                }
+            }
+        }
+        return null;
     }
 
     // ── /poi add ───────────────────────────────────────────────────────────────
@@ -685,6 +759,49 @@ public final class PoiCommand {
         };
     }
 
+    // ── Pagination helpers ─────────────────────────────────────────────────────
+
+    private static <T> List<T> getPage(List<T> items, int page, int pageSize) {
+        int start = (page - 1) * pageSize;
+        if (start >= items.size()) return List.of();
+        return items.subList(start, Math.min(start + pageSize, items.size()));
+    }
+
+    private static int totalPages(int totalItems, int pageSize) {
+        return Math.max(1, (totalItems + pageSize - 1) / pageSize);
+    }
+
+    /**
+     * Builds a clickable [◀ Prev]  Page X/Y  [Next ▶] bar.
+     * Inactive buttons are shown in dark gray; active ones are aqua and clickable.
+     */
+    private static Component paginationBar(String baseCommand, int page, int totalPages) {
+        MutableComponent bar = Component.empty();
+
+        if (page > 1) {
+            bar.append(Component.literal("[◀ Prev]").withStyle(s -> s
+                    .withColor(ChatFormatting.AQUA)
+                    .withClickEvent(new ClickEvent.RunCommand(
+                            baseCommand + " " + (page - 1)))));
+        } else {
+            bar.append(Component.literal("[◀ Prev]").withStyle(s -> s.withColor(ChatFormatting.DARK_GRAY)));
+        }
+
+        bar.append(Component.literal("  Page " + page + "/" + totalPages + "  ")
+                .withStyle(ChatFormatting.GRAY));
+
+        if (page < totalPages) {
+            bar.append(Component.literal("[Next ▶]").withStyle(s -> s
+                    .withColor(ChatFormatting.AQUA)
+                    .withClickEvent(new ClickEvent.RunCommand(
+                            baseCommand + " " + (page + 1)))));
+        } else {
+            bar.append(Component.literal("[Next ▶]").withStyle(s -> s.withColor(ChatFormatting.DARK_GRAY)));
+        }
+
+        return bar;
+    }
+
     // ── Chat helpers ───────────────────────────────────────────────────────────
 
     private static String header(String text) {
@@ -706,6 +823,10 @@ public final class PoiCommand {
     private static void send(FabricClientCommandSource source, String legacyText) {
         Minecraft.getInstance().execute(() ->
                 source.sendFeedback(Component.literal(legacyText)));
+    }
+
+    private static void sendComponent(FabricClientCommandSource source, Component component) {
+        Minecraft.getInstance().execute(() -> source.sendFeedback(component));
     }
 
     /**

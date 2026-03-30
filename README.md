@@ -44,25 +44,43 @@ Before you can sync POIs, you need an API key:
 ## 🎮 Basic Commands
 
 ### World Management
-- `/world list`: Show all your saved worlds.
+- `/world list [page]`: Show your saved worlds (paginated).
 - `/world add [name]`: Create a new world record.
 - `/world select <#>`: Select a world from the list.
 - `/world select`: Auto-select based on the current world seed.
 - `/world help`: Show all world management commands.
 
 ### Group Management
-- `/group list`: List categories/groups in the current world.
+- `/group list [page]`: List categories/groups in the current world (paginated).
 - `/group add <name>`: Create a new group.
 - `/group select <#>`: Focus on a group (new POIs will be added here).
 - `/group clear`: Deselect the current group.
 
 ### POI Management
 - `/poi add <name> [desc]`: Add a POI at your current location.
-- `/poi list [group#]`: List POIs in the current world or a specific group.
-- `/poi track <#>`: Track a POI from the last /poi list (shows direction).
+- `/poi list [page]`: List all POIs in the current world (paginated).
+- `/poi list group <#> [page]`: List POIs within a specific group.
+- `/poi track <#>`: Track a POI from the last `/poi list` (shows a 3D direction indicator).
 - `/poi track clear`: Stop tracking the current POI.
 - `/poi help`: Show general help.
 - `/poi reset`: Wipe all local configs and API key.
+
+### Aliases
+- `/worlds [page]` → `/world list [page]`
+- `/groups [page]` → `/group list [page]`
+- `/pois [page]` → `/poi list [page]`
+
+---
+
+## 📖 List Pagination
+
+Commands that return lists support pagination (8 items per page). When a list spans multiple pages, a navigation bar appears at the bottom:
+
+`[◀ Prev]  Page 1/2  [Next ▶]`
+
+- **Click to navigate**: Click **[◀ Prev]** or **[Next ▶]** directly in chat — no typing needed.
+- **Jump to page**: Append a page number to any list command (e.g. `/poi list 3`, `/worlds 2`, `/pois 2`).
+- POI numbers are **global** across pages, so `/poi track 12` always refers to the same POI regardless of which page it's on.
 
 ---
 
