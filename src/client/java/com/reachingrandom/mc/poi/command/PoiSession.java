@@ -58,4 +58,34 @@ public final class PoiSession {
     public int groupCount() {
         return lastGroupsList.size();
     }
+
+    // ── Flat POI list (from last /poi list) ────────────────────────────────────
+    private List<ApiModels.WorldItem> lastPoiList = Collections.emptyList();
+
+    public void setLastPoiList(List<ApiModels.WorldItem> pois) {
+        this.lastPoiList = List.copyOf(pois);
+    }
+
+    /**
+     * Returns the POI at 1-based index, or null if out of range.
+     */
+    public ApiModels.WorldItem getPoiByNumber(int number) {
+        if (number < 1 || number > lastPoiList.size()) return null;
+        return lastPoiList.get(number - 1);
+    }
+
+    public int poiCount() {
+        return lastPoiList.size();
+    }
+
+    // ── Selected (tracked) POI ─────────────────────────────────────────────────
+    private ApiModels.WorldItem selectedPoi = null;
+
+    public void setSelectedPoi(ApiModels.WorldItem poi) {
+        this.selectedPoi = poi;
+    }
+
+    public ApiModels.WorldItem getSelectedPoi() {
+        return selectedPoi;
+    }
 }
