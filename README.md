@@ -14,6 +14,7 @@
 - **📁 Multi-World & Groups**: Organize your POIs by world entry and nested groups (categories).
 - **🌱 Seed Detection**: Automatically identifies singleplayer worlds by their seed for seamless selection.
 - **🌌 Dimension Support**: Tracks whether a POI is in the Overworld, Nether, or The End.
+- **📍 Live Tracking**: Show a 3D direction indicator towards a selected POI.
 - **💻 Clean CLI**: A structured and intuitive command interface.
 
 ---
@@ -58,6 +59,8 @@ Before you can sync POIs, you need an API key:
 ### POI Management
 - `/poi add <name> [desc]`: Add a POI at your current location.
 - `/poi list [group#]`: List POIs in the current world or a specific group.
+- `/poi track <#>`: Track a POI from the last /poi list (shows direction).
+- `/poi track clear`: Stop tracking the current POI.
 - `/poi help`: Show general help.
 - `/poi reset`: Wipe all local configs and API key.
 
