@@ -98,6 +98,15 @@ public final class PoiCommand {
                             .executes(ctx -> executeAdd(ctx.getSource(),
                                     getString(ctx, "name"),
                                     getString(ctx, "description"))))))
+
+                // /poi track [number | clear]
+                .then(literal("track")
+                    .executes(ctx -> executeTrackHelp(ctx.getSource()))
+                    .then(literal("clear")
+                        .executes(ctx -> executeTrackClear(ctx.getSource())))
+                    .then(argument("number", IntegerArgumentType.integer(1))
+                        .executes(ctx -> executeTrack(ctx.getSource(),
+                                getInteger(ctx, "number")))))
         );
 
         // --- /group <command> ---
@@ -431,6 +440,8 @@ public final class PoiCommand {
             ApiModels.ItemsResponse resp = api.getItems(worldId);
             List<ApiModels.WorldItem> items = resp.items != null ? resp.items : List.of();
 
+            List<ApiModels.WorldItem> flatPois = new ArrayList<>();
+
             if (groupNumber > 0) {
                 // List POIs inside a specific group
                 ApiModels.WorldItem group = PoiSession.get().getGroupByNumber(groupNumber);
@@ -443,7 +454,10 @@ public final class PoiCommand {
                 if (pois.isEmpty()) {
                     send(source, gray("  (empty)"));
                 } else {
-                    printPois(source, pois);
+                    for (ApiModels.WorldItem poi : pois) {
+                        flatPois.add(poi);
+                        printPoiLineNumbered(source, flatPois.size(), poi);
+                    }
                 }
             } else {
                 // List everything
@@ -456,11 +470,20 @@ public final class PoiCommand {
                     if ("group".equals(item.type)) {
                         send(source, "  §6[" + item.name + "]");
                         List<ApiModels.WorldItem> pois = item.items != null ? item.items : List.of();
-                        printPois(source, pois);
+                        for (ApiModels.WorldItem poi : pois) {
+                            flatPois.add(poi);
+                            printPoiLineNumbered(source, flatPois.size(), poi);
+                        }
                     } else {
-                        printPoiLine(source, item);
+                        flatPois.add(item);
+                        printPoiLineNumbered(source, flatPois.size(), item);
                     }
                 }
+            }
+
+            PoiSession.get().setLastPoiList(flatPois);
+            if (!flatPois.isEmpty()) {
+                send(source, gray("Use /poi track <#> to show a direction indicator."));
             }
         });
         return 1;
@@ -501,6 +524,41 @@ public final class PoiCommand {
                 send(source, gray("  (Added to current group)"));
             }
         });
+        return 1;
+    }
+
+    // ── /poi track ────────────────────────────────────────────────────────────
+
+    private static int executeTrackHelp(FabricClientCommandSource source) {
+        send(source, gray("Usage: ") + "/poi track <#>" + gray(" — track a POI from /poi list"));
+        send(source, gray("       ") + "/poi track clear" + gray(" — stop tracking"));
+        return 1;
+    }
+
+    private static int executeTrack(FabricClientCommandSource source, int number) {
+        ApiModels.WorldItem poi = PoiSession.get().getPoiByNumber(number);
+        if (poi == null) {
+            int count = PoiSession.get().poiCount();
+            if (count == 0) {
+                send(source, err("No POIs loaded yet. Run /poi list first."));
+            } else {
+                send(source, err("Invalid number. Choose 1–" + count + "."));
+            }
+            return 0;
+        }
+        if (poi.coords == null || poi.coords.x == null || poi.coords.z == null) {
+            send(source, err("POI has no coordinates and cannot be tracked."));
+            return 0;
+        }
+        PoiSession.get().setSelectedPoi(poi);
+        send(source, ok("Now tracking: " + poi.name));
+        send(source, gray("  " + formatCoords(poi.coords) + " — " + dimensionLabel(poi.dimension)));
+        return 1;
+    }
+
+    private static int executeTrackClear(FabricClientCommandSource source) {
+        PoiSession.get().setSelectedPoi(null);
+        send(source, ok("Tracking cleared."));
         return 1;
     }
 
@@ -573,6 +631,16 @@ public final class PoiCommand {
                                    List<ApiModels.WorldItem> pois) {
         for (ApiModels.WorldItem poi : pois) {
             printPoiLine(source, poi);
+        }
+    }
+
+    private static void printPoiLineNumbered(FabricClientCommandSource source, int number, ApiModels.WorldItem poi) {
+        String coords = poi.coords != null
+                ? gray(" [" + formatCoords(poi.coords) + " — " + dimensionLabel(poi.dimension) + "]")
+                : "";
+        send(source, "  §e" + number + ".§r §b" + poi.name + "§r" + coords);
+        if (poi.description != null && !poi.description.isBlank()) {
+            send(source, gray("    " + poi.description));
         }
     }
 
