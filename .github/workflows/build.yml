@@ -22,3 +22,4 @@ jobs:
       create_release: ${{ inputs.build_type == 'Build & Release' }}
     permissions:
       contents: write
+    secrets: inherit
