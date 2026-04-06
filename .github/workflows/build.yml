@@ -5,10 +5,13 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
-      create_release:
-        description: 'Generate a new release'
-        type: boolean
-        default: false
+      build_type:
+        description: 'Action to perform'
+        type: choice
+        options:
+          - Build only
+          - Build & Release
+        default: 'Build only'
 
 jobs:
   build:
@@ -16,6 +19,6 @@ jobs:
     with:
       minecraft_version: '1.21.11'
       java_version: '25'
-      create_release: ${{ inputs.create_release == true }}
+      create_release: ${{ inputs.build_type == 'Build & Release' }}
     permissions:
       contents: write
