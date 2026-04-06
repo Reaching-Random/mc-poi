@@ -11,7 +11,6 @@ import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.ClickEvent;
-import net.minecraft.network.chat.ClickEvent.RunCommand;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.level.Level;
@@ -117,12 +116,24 @@ public final class PoiCommand {
 
                 // /poi track [number | clear]
                 .then(literal("track")
-                    .executes(ctx -> executeTrackHelp(ctx.getSource()))
+                    .executes(ctx -> executeTrackList(ctx.getSource()))
                     .then(literal("clear")
                         .executes(ctx -> executeTrackClear(ctx.getSource())))
                     .then(argument("number", IntegerArgumentType.integer(1))
                         .executes(ctx -> executeTrack(ctx.getSource(),
                                 getInteger(ctx, "number")))))
+
+                // /poi untrack <number>
+                .then(literal("untrack")
+                    .then(argument("number", IntegerArgumentType.integer(1))
+                        .executes(ctx -> executeUntrack(ctx.getSource(),
+                                getInteger(ctx, "number")))))
+
+                // /poi copyurl <url>  — internal: copies URL and confirms in chat
+                .then(literal("copyurl")
+                    .then(argument("url", StringArgumentType.greedyString())
+                        .executes(ctx -> executeCopyUrl(ctx.getSource(),
+                                getString(ctx, "url")))))
         );
 
         // --- /group <command> ---
@@ -189,12 +200,16 @@ public final class PoiCommand {
         send(source, gray("  /poi setkey <key>      ") + "Save your API key");
         send(source, gray("  /poi list [group#] [p]") + "List POIs (optionally by group/page)");
         send(source, gray("  /poi add <name> [desc] ") + "Add POI (to current group if selected)");
-        send(source, gray("  /poi track <#>         ") + "Track a POI from the last list (shows direction)");
-        send(source, gray("  /poi track clear       ") + "Stop tracking");
+        send(source, gray("  /poi track             ") + "List all currently tracked POIs");
+        send(source, gray("  /poi track <#>         ") + "Add a POI to tracked (from last list)");
+        send(source, gray("  /poi untrack <#>       ") + "Remove a POI from tracked");
+        send(source, gray("  /poi track clear       ") + "Stop tracking all POIs");
         send(source, gray("  /poi reset             ") + "Clear ALL data and API key");
         send(source, "");
         send(source, gray("Run ") + "/world help" + gray(" or ") + "/group help" + gray(" for more."));
-        send(source, gray("Website: ") + baseUrl + HELP_PATH);
+        MutableComponent website = Component.literal("Website: ").withStyle(ChatFormatting.GRAY)
+                .append(urlComponent(baseUrl + HELP_PATH));
+        sendComponent(source, website);
         return 1;
     }
 
@@ -414,9 +429,21 @@ public final class PoiCommand {
 
             for (int i = 0; i < pageItems.size(); i++) {
                 ApiModels.WorldItem g = pageItems.get(i);
+                int globalNum = globalOffset + i + 1;
                 int poiCount = (g.items != null) ? g.items.size() : 0;
-                String marker = (g.id.equals(currentGroupId)) ? " §a[Selected]§r" : "";
-                send(source, "  §e" + (globalOffset + i + 1) + ".§r " + g.name + gray(" (" + poiCount + " POIs)") + marker);
+                boolean isSelected = g.id.equals(currentGroupId);
+                String toggleCmd = isSelected ? "/group clear" : "/group select " + globalNum;
+
+                MutableComponent indicator = Component.literal(isSelected ? "[*] " : "[ ] ")
+                        .withStyle(s -> s
+                                .withColor(isSelected ? ChatFormatting.GREEN : ChatFormatting.DARK_GRAY)
+                                .withClickEvent(new ClickEvent.RunCommand(toggleCmd)));
+                MutableComponent line = Component.literal("  ")
+                        .append(indicator)
+                        .append(Component.literal(globalNum + ". ").withStyle(ChatFormatting.YELLOW))
+                        .append(Component.literal(g.name))
+                        .append(Component.literal(" (" + poiCount + " POIs)").withStyle(ChatFormatting.GRAY));
+                sendComponent(source, line);
             }
 
             if (totalPages > 1) {
@@ -541,19 +568,19 @@ public final class PoiCommand {
                     } else if (groupName == null && lastGroupName != null) {
                         lastGroupName = null;
                     }
-                    printPoiLineNumbered(source, allIdx + 1, poi);
+                    sendPoiLineNumbered(source, allIdx + 1, poi);
                     allIdx++;
                 }
             } else {
                 for (int i = 0; i < pageItems.size(); i++) {
-                    printPoiLineNumbered(source, globalOffset + i + 1, pageItems.get(i));
+                    sendPoiLineNumbered(source, globalOffset + i + 1, pageItems.get(i));
                 }
             }
 
             if (totalPages > 1) {
                 sendComponent(source, paginationBar(pageCmd, clampedPage, totalPages));
             } else {
-                send(source, gray("Use /poi track <#> to show a direction indicator."));
+                send(source, gray("Click [ ] to track a POI, or use /poi track <#>."));
             }
         });
         return 1;
@@ -611,9 +638,22 @@ public final class PoiCommand {
 
     // ── /poi track ────────────────────────────────────────────────────────────
 
-    private static int executeTrackHelp(FabricClientCommandSource source) {
-        send(source, gray("Usage: ") + "/poi track <#>" + gray(" — track a POI from /poi list"));
-        send(source, gray("       ") + "/poi track clear" + gray(" — stop tracking"));
+    private static int executeTrackList(FabricClientCommandSource source) {
+        List<ApiModels.WorldItem> tracked = PoiSession.get().getTrackedPois();
+        if (tracked.isEmpty()) {
+            send(source, gray("No POIs currently tracked. Use /poi track <#> after /poi list."));
+            return 1;
+        }
+        send(source, header("Tracked POIs"));
+        for (ApiModels.WorldItem poi : tracked) {
+            int listNum = PoiSession.get().getListNumber(poi);
+            String numLabel = listNum >= 1 ? String.valueOf(listNum) : "?";
+            String coords = poi.coords != null
+                    ? gray(" [" + formatCoords(poi.coords) + " — " + dimensionLabel(poi.dimension) + "]")
+                    : "";
+            send(source, "  §a" + numLabel + ".§r §b" + poi.name + "§r" + coords);
+        }
+        send(source, gray("Use /poi untrack <#> to stop tracking (numbers match /pois)."));
         return 1;
     }
 
@@ -632,15 +672,35 @@ public final class PoiCommand {
             send(source, err("POI has no coordinates and cannot be tracked."));
             return 0;
         }
-        PoiSession.get().setSelectedPoi(poi);
+        PoiSession.get().addTrackedPoi(poi);
         send(source, ok("Now tracking: " + poi.name));
         send(source, gray("  " + formatCoords(poi.coords) + " — " + dimensionLabel(poi.dimension)));
         return 1;
     }
 
+    private static int executeUntrack(FabricClientCommandSource source, int number) {
+        int count = PoiSession.get().poiCount();
+        ApiModels.WorldItem poi = PoiSession.get().getPoiByNumber(number);
+        if (poi == null) {
+            if (count == 0) {
+                send(source, err("No POIs loaded yet. Run /poi list first."));
+            } else {
+                send(source, err("Invalid number. Choose 1–" + count + "."));
+            }
+            return 0;
+        }
+        if (!PoiSession.get().isTracked(poi)) {
+            send(source, err(poi.name + " is not currently tracked."));
+            return 0;
+        }
+        PoiSession.get().removeTrackedPoi(number);
+        send(source, ok("Stopped tracking: " + poi.name));
+        return 1;
+    }
+
     private static int executeTrackClear(FabricClientCommandSource source) {
-        PoiSession.get().setSelectedPoi(null);
-        send(source, ok("Tracking cleared."));
+        PoiSession.get().clearTrackedPois();
+        send(source, ok("All tracking cleared."));
         return 1;
     }
 
@@ -649,7 +709,9 @@ public final class PoiCommand {
     private static boolean checkApiKey(FabricClientCommandSource source) {
         if (!PoiConfig.get().hasApiKey()) {
             String baseUrl = PoiConfig.get().getApiBaseUrl();
-            send(source, err("No API key set. Get one at " + baseUrl + HELP_PATH));
+            MutableComponent keyMsg = Component.literal("No API key set. Get one at ").withStyle(ChatFormatting.RED)
+                    .append(urlComponent(baseUrl + HELP_PATH));
+            Minecraft.getInstance().execute(() -> source.sendFeedback(keyMsg));
             send(source, err("Then run: /poi setkey <your-key>"));
             return false;
         }
@@ -716,11 +778,31 @@ public final class PoiCommand {
         }
     }
 
-    private static void printPoiLineNumbered(FabricClientCommandSource source, int number, ApiModels.WorldItem poi) {
-        String coords = poi.coords != null
-                ? gray(" [" + formatCoords(poi.coords) + " — " + dimensionLabel(poi.dimension) + "]")
-                : "";
-        send(source, "  §e" + number + ".§r §b" + poi.name + "§r" + coords);
+    private static void sendPoiLineNumbered(FabricClientCommandSource source, int number, ApiModels.WorldItem poi) {
+        boolean tracked = PoiSession.get().isTracked(poi);
+        String toggleCmd = tracked ? "/poi untrack " + number : "/poi track " + number;
+
+        MutableComponent indicator = Component.literal(tracked ? "[*] " : "[ ] ")
+                .withStyle(s -> s
+                        .withColor(tracked ? ChatFormatting.GREEN : ChatFormatting.DARK_GRAY)
+                        .withClickEvent(new ClickEvent.RunCommand(toggleCmd)));
+        MutableComponent name = Component.literal(poi.name)
+                .withStyle(s -> s
+                        .withColor(ChatFormatting.AQUA)
+                        .withClickEvent(new ClickEvent.RunCommand(toggleCmd)));
+        MutableComponent line = Component.literal("  ")
+                .append(indicator)
+                .append(Component.literal(number + ". ").withStyle(ChatFormatting.YELLOW))
+                .append(name);
+
+        if (poi.coords != null) {
+            line.append(Component.literal(
+                    " [" + formatCoords(poi.coords) + " — " + dimensionLabel(poi.dimension) + "]"
+            ).withStyle(ChatFormatting.GRAY));
+        }
+
+        sendComponent(source, line);
+
         if (poi.description != null && !poi.description.isBlank()) {
             send(source, gray("    " + poi.description));
         }
@@ -809,6 +891,20 @@ public final class PoiCommand {
     }
 
     // ── Chat helpers ───────────────────────────────────────────────────────────
+
+    private static int executeCopyUrl(FabricClientCommandSource source, String url) {
+        Minecraft.getInstance().keyboardHandler.setClipboard(url);
+        send(source, ok("Copied to clipboard: ") + gray(url));
+        return 1;
+    }
+
+    private static MutableComponent urlComponent(String url) {
+        return Component.literal(url)
+                .withStyle(s -> s
+                        .withColor(ChatFormatting.AQUA)
+                        .withUnderlined(true)
+                        .withClickEvent(new ClickEvent.RunCommand("/poi copyurl " + url)));
+    }
 
     private static String header(String text) {
         return "§7§m-----§r §f§l" + text + "§r §7§m-----§r";

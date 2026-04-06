@@ -14,7 +14,7 @@
 - **📁 Multi-World & Groups**: Organize your POIs by world entry and nested groups (categories).
 - **🌱 Seed Detection**: Automatically identifies singleplayer worlds by their seed for seamless selection.
 - **🌌 Dimension Support**: Tracks whether a POI is in the Overworld, Nether, or The End.
-- **📍 Live Tracking**: Show a 3D direction indicator towards a selected POI.
+- **📍 Multi-POI Tracking**: Track multiple POIs simultaneously, each with its own 3D direction indicator.
 - **💻 Clean CLI**: A structured and intuitive command interface.
 
 ---
@@ -51,17 +51,19 @@ Before you can sync POIs, you need an API key:
 - `/world help`: Show all world management commands.
 
 ### Group Management
-- `/group list [page]`: List categories/groups in the current world.
+- `/group list [page]`: List categories/groups in the current world. Click `[ ]` next to a group to select it; click `[*]` to deselect.
 - `/group add <name>`: Create a new group.
 - `/group select <#>`: Focus on a group (new POIs will be added here).
 - `/group clear`: Deselect the current group.
 
 ### POI Management
 - `/poi add <name> [desc]`: Add a POI at your current location.
-- `/poi list [page]`: List all POIs in the current world (paginated).
+- `/poi list [page]`: List all POIs in the current world (paginated). Click `[ ]` next to any POI to start tracking it; click `[*]` to stop.
 - `/poi list group <#> [page]`: List POIs within a specific group.
-- `/poi track <#>`: Track a POI from the last `/poi list` (shows a 3D direction indicator).
-- `/poi track clear`: Stop tracking the current POI.
+- `/poi track`: List all currently tracked POIs (numbers match `/pois` for easy reference).
+- `/poi track <#>`: Add a POI from the last list to tracked POIs (multiple allowed).
+- `/poi untrack <#>`: Remove a POI from tracked (use the number shown in `/poi list`).
+- `/poi track clear`: Stop tracking all POIs.
 - `/poi help`: Show general help.
 - `/poi reset`: Wipe all local configs and API key.
 
@@ -81,6 +83,9 @@ Commands that return lists support pagination (8 items per page). When a list sp
 - **Click to navigate**: Click **[◀ Prev]** or **[Next ▶]** directly in chat — no typing needed.
 - **Jump to page**: Append a page number to any list command (e.g. `/poi list 3`, `/worlds 2`, `/pois 2`).
 - POI numbers are **global** across pages, so `/poi track 12` always refers to the same POI regardless of which page it's on.
+- **Clickable track toggles**: In `/poi list` and `/pois`, each row shows `[ ]` (untracked) or `[*]` (tracked). Click either the indicator or the POI name to toggle tracking without typing a command. The same numbers are used by `/poi track` and `/poi untrack`.
+- **Clickable group toggles**: In `/group list` and `/groups`, click `[ ]` to select a group or `[*]` to deselect it.
+- **Clickable URLs**: URLs shown in chat (e.g. in `/poi help`) can be clicked to copy them to your clipboard.
 
 
 ---

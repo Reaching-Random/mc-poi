@@ -2,6 +2,7 @@ package com.reachingrandom.mc.poi.command;
 
 import com.reachingrandom.mc.poi.api.ApiModels;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -78,14 +79,63 @@ public final class PoiSession {
         return lastPoiList.size();
     }
 
-    // ── Selected (tracked) POI ─────────────────────────────────────────────────
-    private ApiModels.WorldItem selectedPoi = null;
-
-    public void setSelectedPoi(ApiModels.WorldItem poi) {
-        this.selectedPoi = poi;
+    /**
+     * Returns the 1-based position of the given POI in the last loaded list,
+     * or -1 if it isn't in the list (e.g. list hasn't been refreshed since tracking).
+     */
+    public int getListNumber(ApiModels.WorldItem poi) {
+        for (int i = 0; i < lastPoiList.size(); i++) {
+            ApiModels.WorldItem p = lastPoiList.get(i);
+            if (poi.id != null && poi.id.equals(p.id)) return i + 1;
+            if (poi == p) return i + 1;
+        }
+        return -1;
     }
 
+    // ── Tracked POIs (multi-track) ─────────────────────────────────────────────
+    private final List<ApiModels.WorldItem> trackedPois = new ArrayList<>();
+
+    /**
+     * Adds a POI to the tracked set. If a POI with the same ID is already
+     * tracked it is replaced (so coordinates stay fresh).
+     */
+    public void addTrackedPoi(ApiModels.WorldItem poi) {
+        if (poi.id != null) {
+            trackedPois.removeIf(p -> poi.id.equals(p.id));
+        }
+        trackedPois.add(poi);
+    }
+
+    /**
+     * Removes the POI at the given 1-based list number from tracked POIs.
+     * Returns the removed POI, or null if the number is invalid or not tracked.
+     */
+    public ApiModels.WorldItem removeTrackedPoi(int listNumber) {
+        ApiModels.WorldItem poi = getPoiByNumber(listNumber);
+        if (poi == null) return null;
+        boolean removed = (poi.id != null)
+                ? trackedPois.removeIf(p -> poi.id.equals(p.id))
+                : trackedPois.remove(poi);
+        return removed ? poi : null;
+    }
+
+    public boolean isTracked(ApiModels.WorldItem poi) {
+        if (poi.id != null) {
+            return trackedPois.stream().anyMatch(p -> poi.id.equals(p.id));
+        }
+        return trackedPois.contains(poi);
+    }
+
+    public List<ApiModels.WorldItem> getTrackedPois() {
+        return Collections.unmodifiableList(trackedPois);
+    }
+
+    public void clearTrackedPois() {
+        trackedPois.clear();
+    }
+
+    /** Returns the first tracked POI, or null if none are tracked. */
     public ApiModels.WorldItem getSelectedPoi() {
-        return selectedPoi;
+        return trackedPois.isEmpty() ? null : trackedPois.get(0);
     }
 }
