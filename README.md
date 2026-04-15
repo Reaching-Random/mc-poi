@@ -58,7 +58,8 @@ Before you can sync POIs, you need an API key:
 
 ### POI Management
 - `/poi add <name> [desc]`: Add a POI at your current location.
-- `/poi list [page]`: List all POIs in the current world (paginated). Click `[ ]` next to any POI to start tracking it; click `[*]` to stop.
+- `/poi list [page]`: List POIs **in your current dimension** (Overworld, Nether, or End). Click `[ ]` to start tracking; click `[*]` to stop.
+- `/poi list all [page]`: List POIs across **all dimensions**.
 - `/poi list group <#> [page]`: List POIs within a specific group.
 - `/poi track`: List all currently tracked POIs (numbers match `/pois` for easy reference).
 - `/poi track <#>`: Add a POI from the last list to tracked POIs (multiple allowed).
@@ -70,7 +71,8 @@ Before you can sync POIs, you need an API key:
 ### Aliases
 - `/worlds [page]` → `/world list [page]`
 - `/groups [page]` → `/group list [page]`
-- `/pois [page]` → `/poi list [page]`
+- `/pois [page]` → `/poi list [page]` (current dimension only)
+- `/pois all [page]` → `/poi list all [page]` (all dimensions)
 
 ---
 
@@ -82,7 +84,7 @@ Commands that return lists support pagination (8 items per page). When a list sp
 
 - **Click to navigate**: Click **[◀ Prev]** or **[Next ▶]** directly in chat — no typing needed.
 - **Jump to page**: Append a page number to any list command (e.g. `/poi list 3`, `/worlds 2`, `/pois 2`).
-- POI numbers are **global** across pages, so `/poi track 12` always refers to the same POI regardless of which page it's on.
+- POI numbers are **global** — the same POI always has the same number whether you're viewing your current dimension or all dimensions, so `/poi track 12` always refers to the same POI.
 - **Clickable track toggles**: In `/poi list` and `/pois`, each row shows `[ ]` (untracked) or `[*]` (tracked). Click either the indicator or the POI name to toggle tracking without typing a command. The same numbers are used by `/poi track` and `/poi untrack`.
 - **Clickable group toggles**: In `/group list` and `/groups`, click `[ ]` to select a group or `[*]` to deselect it.
 - **Clickable URLs**: URLs shown in chat (e.g. in `/poi help`) can be clicked to copy them to your clipboard.

@@ -10,6 +10,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
@@ -30,6 +31,13 @@ public class PoiDirectionRenderer {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
 
+        // Determine the player's current dimension so we only render same-dimension POIs
+        var dim = mc.player.level().dimension();
+        String currentDimension;
+        if (dim.equals(Level.NETHER)) currentDimension = "nether";
+        else if (dim.equals(Level.END)) currentDimension = "end";
+        else currentDimension = "overworld";
+
         Camera camera = mc.gameRenderer.mainCamera();
         Vec3 cameraPos = camera.position();
         Font font = mc.font;
@@ -37,6 +45,9 @@ public class PoiDirectionRenderer {
         SubmitNodeCollector collector = context.submitNodeCollector();
 
         for (ApiModels.WorldItem poi : tracked) {
+            // Skip POIs that are in a different dimension
+            String poiDim = poi.dimension != null ? poi.dimension : "overworld";
+            if (!currentDimension.equals(poiDim)) continue;
             renderPoi(poseStack, collector, font, cameraPos, poi);
         }
     }
