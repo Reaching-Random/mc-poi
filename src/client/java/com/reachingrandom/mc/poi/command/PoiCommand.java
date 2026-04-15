@@ -88,21 +88,27 @@ public final class PoiCommand {
                 .then(literal("groups")
                     .executes(ctx -> executeGroups(ctx.getSource(), 1)))
 
-                // /poi list [page]
-                // /poi list group <group#> [page]
+                // /poi list [page]         — current dimension only (default)
+                // /poi list all [page]     — all dimensions
+                // /poi list group <#> [page]
                 .then(literal("list")
-                    .executes(ctx -> executeList(ctx.getSource(), 0, 1))
+                    .executes(ctx -> executeList(ctx.getSource(), 0, 1, false))
                     .then(argument("page", IntegerArgumentType.integer(1))
                         .executes(ctx -> executeList(ctx.getSource(), 0,
-                                getInteger(ctx, "page"))))
+                                getInteger(ctx, "page"), false)))
+                    .then(literal("all")
+                        .executes(ctx -> executeList(ctx.getSource(), 0, 1, true))
+                        .then(argument("page", IntegerArgumentType.integer(1))
+                            .executes(ctx -> executeList(ctx.getSource(), 0,
+                                    getInteger(ctx, "page"), true))))
                     .then(literal("group")
                         .then(argument("group#", IntegerArgumentType.integer(1))
                             .executes(ctx -> executeList(ctx.getSource(),
-                                    getInteger(ctx, "group#"), 1))
+                                    getInteger(ctx, "group#"), 1, false))
                             .then(argument("page", IntegerArgumentType.integer(1))
                                 .executes(ctx -> executeList(ctx.getSource(),
                                         getInteger(ctx, "group#"),
-                                        getInteger(ctx, "page")))))))
+                                        getInteger(ctx, "page"), false))))))
 
                 // /poi add <name> [description]
                 .then(literal("add")
@@ -173,9 +179,13 @@ public final class PoiCommand {
 
         dispatcher.register(
             literal("pois")
-                .executes(ctx -> executeList(ctx.getSource(), 0, 1))
+                .executes(ctx -> executeList(ctx.getSource(), 0, 1, false))
+                .then(literal("all")
+                    .executes(ctx -> executeList(ctx.getSource(), 0, 1, true))
+                    .then(argument("page", IntegerArgumentType.integer(1))
+                        .executes(ctx -> executeList(ctx.getSource(), 0, getInteger(ctx, "page"), true))))
                 .then(argument("page", IntegerArgumentType.integer(1))
-                    .executes(ctx -> executeList(ctx.getSource(), 0, getInteger(ctx, "page"))))
+                    .executes(ctx -> executeList(ctx.getSource(), 0, getInteger(ctx, "page"), false)))
         );
     }
 
@@ -197,14 +207,19 @@ public final class PoiCommand {
     private static int executePoiHelp(FabricClientCommandSource source) {
         String baseUrl = PoiConfig.get().getApiBaseUrl();
         send(source, header("POI Tracker — POI Management"));
-        send(source, gray("  /poi setkey <key>      ") + "Save your API key");
-        send(source, gray("  /poi list [group#] [p]") + "List POIs (optionally by group/page)");
-        send(source, gray("  /poi add <name> [desc] ") + "Add POI (to current group if selected)");
-        send(source, gray("  /poi track             ") + "List all currently tracked POIs");
-        send(source, gray("  /poi track <#>         ") + "Add a POI to tracked (from last list)");
-        send(source, gray("  /poi untrack <#>       ") + "Remove a POI from tracked");
-        send(source, gray("  /poi track clear       ") + "Stop tracking all POIs");
-        send(source, gray("  /poi reset             ") + "Clear ALL data and API key");
+        send(source, gray("  /poi setkey <key>         ") + "Save your API key");
+        send(source, gray("  /poi list [page]          ") + "List POIs in current dimension");
+        send(source, gray("  /poi list all [page]      ") + "List POIs in all dimensions");
+        send(source, gray("  /poi list group <#> [page]") + "List POIs in a specific group");
+        send(source, gray("  /poi add <name> [desc]    ") + "Add POI (to current group if selected)");
+        send(source, gray("  /poi track                ") + "List all currently tracked POIs");
+        send(source, gray("  /poi track <#>            ") + "Add a POI to tracked (from last list)");
+        send(source, gray("  /poi untrack <#>          ") + "Remove a POI from tracked");
+        send(source, gray("  /poi track clear          ") + "Stop tracking all POIs");
+        send(source, gray("  /poi reset                ") + "Clear ALL data and API key");
+        send(source, "");
+        send(source, gray("  /pois         ") + "Shortcut for /poi list (current dimension)");
+        send(source, gray("  /pois all     ") + "Shortcut for /poi list all");
         send(source, "");
         send(source, gray("Run ") + "/world help" + gray(" or ") + "/group help" + gray(" for more."));
         MutableComponent website = Component.literal("Website: ").withStyle(ChatFormatting.GRAY)
@@ -231,6 +246,51 @@ public final class PoiCommand {
         cfg.apiKey = key.trim();
         cfg.save();
         send(source, ok("API key saved."));
+
+        // Capture seed now — getCurrentSeed() touches the server and must run on the game thread
+        String currentSeed = getCurrentSeed();
+
+        async(source, () -> {
+            ApiClient api = new ApiClient();
+            List<ApiModels.WorldSummary> worlds;
+            try {
+                ApiModels.WorldsResponse resp = api.getWorlds();
+                worlds = resp.worlds != null ? resp.worlds : List.of();
+            } catch (Exception e) {
+                send(source, gray("(Could not load worlds: " + e.getMessage() + ")"));
+                return;
+            }
+
+            if (worlds.isEmpty()) {
+                send(source, gray("No worlds found. Use /world add to create one."));
+                return;
+            }
+
+            if (currentSeed == null) {
+                // Remote server — seed unavailable, can't auto-select
+                send(source, gray("Use /world list to select your world."));
+                return;
+            }
+
+            List<ApiModels.WorldSummary> matches = worlds.stream()
+                    .filter(w -> currentSeed.equals(w.seed))
+                    .toList();
+
+            if (matches.isEmpty()) {
+                send(source, gray("No saved worlds match this seed. Use /world add or /world select."));
+            } else if (matches.size() > 1) {
+                send(source, gray("Multiple worlds match this seed. Use /world list to pick one."));
+            } else {
+                ApiModels.WorldSummary match = matches.get(0);
+                PoiConfig poiCfg = PoiConfig.get();
+                poiCfg.currentWorldId = match.id;
+                poiCfg.save();
+                send(source, ok("World auto-selected: " + match.name));
+
+                refreshPoiList(api, match.id);
+                send(source, gray("POIs loaded — use /pois to browse or /poi track <#> to track."));
+            }
+        });
         return 1;
     }
 
@@ -503,21 +563,31 @@ public final class PoiCommand {
 
     // ── /poi list ──────────────────────────────────────────────────────────────
 
-    private static int executeList(FabricClientCommandSource source, int groupNumber, int page) {
+    /**
+     * Lists POIs, optionally filtered to the player's current dimension.
+     *
+     * @param showAll true  → show all dimensions; false → filter to current dimension.
+     *                Numbers are always drawn from the full list so that the same POI
+     *                always has the same number regardless of the filter in effect.
+     */
+    private static int executeList(FabricClientCommandSource source, int groupNumber, int page, boolean showAll) {
         if (!checkApiKey(source)) return 0;
         String worldId = requireCurrentWorld(source);
         if (worldId == null) return 0;
+
+        // Capture dimension on the game thread before going async
+        String currentDimension = showAll ? null : getDimension(Minecraft.getInstance());
 
         async(source, () -> {
             ApiClient api = new ApiClient();
             ApiModels.ItemsResponse resp = api.getItems(worldId);
             List<ApiModels.WorldItem> items = resp.items != null ? resp.items : List.of();
 
-            // Build the full flat POI list (for /poi track indexing)
+            // Build the full flat POI list — this determines global numbers for /poi track
             List<ApiModels.WorldItem> allPois = new ArrayList<>();
-            String pageCmd;
 
             if (groupNumber > 0) {
+                // ── Group-scoped list (no dimension filtering) ──────────────────
                 ApiModels.WorldItem group = PoiSession.get().getGroupByNumber(groupNumber);
                 if (group == null) {
                     send(source, err("Invalid group number. Run /group list first."));
@@ -525,36 +595,76 @@ public final class PoiCommand {
                 }
                 List<ApiModels.WorldItem> pois = group.items != null ? group.items : List.of();
                 allPois.addAll(pois);
-                pageCmd = "/poi list group " + groupNumber;
+
+                PoiSession.get().setLastPoiList(allPois);
                 send(source, header("POIs in: " + group.name));
-            } else {
-                for (ApiModels.WorldItem item : items) {
-                    if ("group".equals(item.type)) {
-                        if (item.items != null) allPois.addAll(item.items);
-                    } else {
-                        allPois.add(item);
-                    }
+
+                if (allPois.isEmpty()) {
+                    send(source, gray("  (empty)"));
+                    return;
                 }
-                pageCmd = "/poi list";
-                send(source, header("POIs"));
-            }
 
-            PoiSession.get().setLastPoiList(allPois);
+                String pageCmd = "/poi list group " + groupNumber;
+                int totalPages = totalPages(allPois.size(), PAGE_SIZE);
+                int clampedPage = Math.max(1, Math.min(page, totalPages));
+                List<ApiModels.WorldItem> pageItems = getPage(allPois, clampedPage, PAGE_SIZE);
+                int globalOffset = (clampedPage - 1) * PAGE_SIZE;
 
-            if (allPois.isEmpty()) {
-                send(source, gray(groupNumber > 0 ? "  (empty)" : "No POIs yet. Use /poi add <name> to add one."));
-                return;
-            }
+                for (int i = 0; i < pageItems.size(); i++) {
+                    sendPoiLineNumbered(source, globalOffset + i + 1, pageItems.get(i));
+                }
 
-            int totalPages = totalPages(allPois.size(), PAGE_SIZE);
-            int clampedPage = Math.max(1, Math.min(page, totalPages));
-            List<ApiModels.WorldItem> pageItems = getPage(allPois, clampedPage, PAGE_SIZE);
-            int globalOffset = (clampedPage - 1) * PAGE_SIZE;
+                if (totalPages > 1) {
+                    sendComponent(source, paginationBar(pageCmd, clampedPage, totalPages));
+                } else {
+                    send(source, gray("Click [ ] to track a POI, or use /poi track <#>."));
+                }
 
-            if (groupNumber == 0) {
-                // Show group headers inline for the all-POIs view
+            } else {
+                // ── World-wide list ─────────────────────────────────────────────
+                // Flatten all items into the complete list (establishes global numbers)
+                allPois.addAll(flattenPois(items));
+
+                // Always store the FULL list so /poi track numbers are global
+                PoiSession.get().setLastPoiList(allPois);
+
+                // Determine the display list and metadata
+                final List<ApiModels.WorldItem> displayPois;
+                final String pageCmd;
+                final String dimLabel;
+
+                if (currentDimension != null) {
+                    final String dimFilter = currentDimension;
+                    displayPois = allPois.stream()
+                            .filter(p -> dimFilter.equals(p.dimension)
+                                    || (p.dimension == null && "overworld".equals(dimFilter)))
+                            .toList();
+                    dimLabel = " (" + dimensionLabel(currentDimension) + ")";
+                    pageCmd = "/poi list";
+                } else {
+                    displayPois = allPois;
+                    dimLabel = " (All)";
+                    pageCmd = "/poi list all";
+                }
+
+                send(source, header("POIs" + dimLabel));
+
+                if (displayPois.isEmpty()) {
+                    if (currentDimension != null) {
+                        send(source, gray("No POIs in the " + dimensionLabel(currentDimension) + "."));
+                        send(source, gray("Use /poi list all to see all dimensions."));
+                    } else {
+                        send(source, gray("No POIs yet. Use /poi add <name> to add one."));
+                    }
+                    return;
+                }
+
+                int totalPages = totalPages(displayPois.size(), PAGE_SIZE);
+                int clampedPage = Math.max(1, Math.min(page, totalPages));
+                List<ApiModels.WorldItem> pageItems = getPage(displayPois, clampedPage, PAGE_SIZE);
+
+                // Display with group headers; numbers come from the GLOBAL allPois index
                 String lastGroupName = null;
-                int allIdx = globalOffset;
                 for (ApiModels.WorldItem poi : pageItems) {
                     String groupName = findGroupName(items, poi);
                     if (groupName != null && !groupName.equals(lastGroupName)) {
@@ -563,22 +673,63 @@ public final class PoiCommand {
                     } else if (groupName == null && lastGroupName != null) {
                         lastGroupName = null;
                     }
-                    sendPoiLineNumbered(source, allIdx + 1, poi);
-                    allIdx++;
+                    int globalNum = allPois.indexOf(poi) + 1;
+                    sendPoiLineNumbered(source, globalNum, poi);
                 }
-            } else {
-                for (int i = 0; i < pageItems.size(); i++) {
-                    sendPoiLineNumbered(source, globalOffset + i + 1, pageItems.get(i));
-                }
-            }
 
-            if (totalPages > 1) {
-                sendComponent(source, paginationBar(pageCmd, clampedPage, totalPages));
-            } else {
-                send(source, gray("Click [ ] to track a POI, or use /poi track <#>."));
+                if (totalPages > 1) {
+                    sendComponent(source, paginationBar(pageCmd, clampedPage, totalPages));
+                } else {
+                    if (currentDimension != null) {
+                        send(source, gray("Click [ ] to track, or use /poi track <#>. Use /poi list all for all dimensions."));
+                    } else {
+                        send(source, gray("Click [ ] to track a POI, or use /poi track <#>."));
+                    }
+                }
             }
         });
         return 1;
+    }
+
+    // ── POI list refresh helpers ───────────────────────────────────────────────
+
+    /**
+     * Flattens a top-level item list (groups + root POIs) into a single ordered
+     * list of POIs.  Groups are expanded in-order; root POIs are included as-is.
+     */
+    private static List<ApiModels.WorldItem> flattenPois(List<ApiModels.WorldItem> items) {
+        List<ApiModels.WorldItem> result = new ArrayList<>();
+        for (ApiModels.WorldItem item : items) {
+            if ("group".equals(item.type)) {
+                if (item.items != null) result.addAll(item.items);
+            } else {
+                result.add(item);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Fetches the POI list using an already-created {@link ApiClient} (i.e. while
+     * already on the async thread) and stores it in {@link PoiSession}.  Errors are
+     * swallowed — this is always a best-effort background refresh.
+     */
+    private static void refreshPoiList(ApiClient api, String worldId) {
+        try {
+            ApiModels.ItemsResponse resp = api.getItems(worldId);
+            List<ApiModels.WorldItem> items = resp.items != null ? resp.items : List.of();
+            PoiSession.get().setLastPoiList(flattenPois(items));
+        } catch (Exception ignored) {}
+    }
+
+    /**
+     * Fires an async POI-list refresh for the given world.  Safe to call from
+     * any thread; errors are swallowed.  Intended for automatic background
+     * refreshes (e.g. on world join) where no chat source is available.
+     */
+    public static void refreshPoiListAsync(String worldId) {
+        if (worldId == null || worldId.isBlank()) return;
+        CompletableFuture.runAsync(() -> refreshPoiList(new ApiClient(), worldId));
     }
 
     /** Returns the group name that contains this POI, or null if it's at root level. */
@@ -627,6 +778,8 @@ public final class PoiCommand {
             } else if (groupId != null) {
                 send(source, gray("  (Added to current group)"));
             }
+            // Silently refresh so /poi track <#> works immediately without a manual /pois call
+            refreshPoiList(api, worldId);
         });
         return 1;
     }

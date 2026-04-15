@@ -9,6 +9,7 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 
@@ -29,12 +30,22 @@ public class PoiDirectionRenderer {
         MultiBufferSource bufferSource = context.consumers();
         if (bufferSource == null) return;
 
+        // Determine the player's current dimension so we only render same-dimension POIs
+        var dim = mc.player.level().dimension();
+        String currentDimension;
+        if (dim.equals(Level.NETHER)) currentDimension = "nether";
+        else if (dim.equals(Level.END)) currentDimension = "end";
+        else currentDimension = "overworld";
+
         Camera camera = mc.gameRenderer.getMainCamera();
         Vec3 cameraPos = camera.position();
         Font font = mc.font;
         PoseStack poseStack = context.matrices();
 
         for (ApiModels.WorldItem poi : tracked) {
+            // Skip POIs that are in a different dimension
+            String poiDim = poi.dimension != null ? poi.dimension : "overworld";
+            if (!currentDimension.equals(poiDim)) continue;
             renderPoi(poseStack, bufferSource, font, cameraPos, poi);
         }
     }
