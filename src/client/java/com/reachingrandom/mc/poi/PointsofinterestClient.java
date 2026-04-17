@@ -23,7 +23,7 @@ public class PointsofinterestClient implements ClientModInitializer {
 		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
 			PoiConfig cfg = PoiConfig.get();
 			if (cfg.hasApiKey() && cfg.currentWorldId != null) {
-				PoiCommand.refreshPoiListAsync(cfg.currentWorldId);
+				PoiCommand.refreshAndRestoreTrackedAsync(cfg.currentWorldId);
 			}
 		});
 	}

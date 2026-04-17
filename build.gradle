@@ -23,6 +23,7 @@ loom {
 
 	runs {
 		client {
+			programArgs "--username", "DevUser"
 			// Load .env.development if it exists
 			def envFile = project.file(".env.development")
 			if (envFile.exists()) {

@@ -11,6 +11,8 @@ import java.io.Reader;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import net.minecraft.client.Minecraft;
 
@@ -31,6 +33,12 @@ public class PoiConfig {
     public String currentWorldId = null;
     public String currentGroupId = null;
     public String currentGroupName = null;
+    public List<String> trackedPoiIds = new ArrayList<>();
+
+    public List<String> getTrackedPoiIds() {
+        if (trackedPoiIds == null) trackedPoiIds = new ArrayList<>();
+        return trackedPoiIds;
+    }
 
     public String getApiBaseUrl() {
         String override = System.getProperty("reaching.random.api.root");

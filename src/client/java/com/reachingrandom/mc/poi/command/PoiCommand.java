@@ -16,6 +16,7 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.level.Level;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -120,20 +121,26 @@ public final class PoiCommand {
                                     getString(ctx, "name"),
                                     getString(ctx, "description"))))))
 
-                // /poi track [number | clear]
+                // /poi track [number(s) | clear]
                 .then(literal("track")
                     .executes(ctx -> executeTrackList(ctx.getSource()))
                     .then(literal("clear")
                         .executes(ctx -> executeTrackClear(ctx.getSource())))
-                    .then(argument("number", IntegerArgumentType.integer(1))
-                        .executes(ctx -> executeTrack(ctx.getSource(),
-                                getInteger(ctx, "number")))))
+                    .then(argument("numbers", StringArgumentType.greedyString())
+                        .executes(ctx -> executeTrackNumbers(ctx.getSource(),
+                                getString(ctx, "numbers")))))
 
-                // /poi untrack <number>
+                // /poi untrack <number(s)>
                 .then(literal("untrack")
-                    .then(argument("number", IntegerArgumentType.integer(1))
-                        .executes(ctx -> executeUntrack(ctx.getSource(),
-                                getInteger(ctx, "number")))))
+                    .then(argument("numbers", StringArgumentType.greedyString())
+                        .executes(ctx -> executeUntrackNumbers(ctx.getSource(),
+                                getString(ctx, "numbers")))))
+
+                // /poi find <query>   — fuzzy search against loaded POI list
+                .then(literal("find")
+                    .then(argument("query", StringArgumentType.greedyString())
+                        .executes(ctx -> executeFind(ctx.getSource(),
+                                getString(ctx, "query")))))
 
                 // /poi copyurl <url>  — internal: copies URL and confirms in chat
                 .then(literal("copyurl")
@@ -187,6 +194,25 @@ public final class PoiCommand {
                 .then(argument("page", IntegerArgumentType.integer(1))
                     .executes(ctx -> executeList(ctx.getSource(), 0, getInteger(ctx, "page"), false)))
         );
+
+        // /track [number(s)] → /poi track
+        dispatcher.register(
+            literal("track")
+                .executes(ctx -> executeTrackList(ctx.getSource()))
+                .then(literal("clear")
+                    .executes(ctx -> executeTrackClear(ctx.getSource())))
+                .then(argument("numbers", StringArgumentType.greedyString())
+                    .executes(ctx -> executeTrackNumbers(ctx.getSource(),
+                            getString(ctx, "numbers"))))
+        );
+
+        // /untrack <number(s)> → /poi untrack
+        dispatcher.register(
+            literal("untrack")
+                .then(argument("numbers", StringArgumentType.greedyString())
+                    .executes(ctx -> executeUntrackNumbers(ctx.getSource(),
+                            getString(ctx, "numbers"))))
+        );
     }
 
     // ── /poi help ──────────────────────────────────────────────────────────────
@@ -212,14 +238,17 @@ public final class PoiCommand {
         send(source, gray("  /poi list all [page]      ") + "List POIs in all dimensions");
         send(source, gray("  /poi list group <#> [page]") + "List POIs in a specific group");
         send(source, gray("  /poi add <name> [desc]    ") + "Add POI (to current group if selected)");
-        send(source, gray("  /poi track                ") + "List all currently tracked POIs");
-        send(source, gray("  /poi track <#>            ") + "Add a POI to tracked (from last list)");
-        send(source, gray("  /poi untrack <#>          ") + "Remove a POI from tracked");
-        send(source, gray("  /poi track clear          ") + "Stop tracking all POIs");
-        send(source, gray("  /poi reset                ") + "Clear ALL data and API key");
+        send(source, gray("  /poi find <words>         ") + "Fuzzy-search POIs by name/description");
+        send(source, gray("  /poi track                  ") + "List all currently tracked POIs");
+        send(source, gray("  /poi track <#> [# ...]      ") + "Track one or more POIs (from last list)");
+        send(source, gray("  /poi untrack <#> [# ...]    ") + "Untrack one or more POIs");
+        send(source, gray("  /poi track clear            ") + "Stop tracking all POIs");
+        send(source, gray("  /poi reset                  ") + "Clear ALL data and API key");
         send(source, "");
-        send(source, gray("  /pois         ") + "Shortcut for /poi list (current dimension)");
-        send(source, gray("  /pois all     ") + "Shortcut for /poi list all");
+        send(source, gray("  /pois           ") + "Shortcut for /poi list (current dimension)");
+        send(source, gray("  /pois all       ") + "Shortcut for /poi list all");
+        send(source, gray("  /track <#> [...] ") + "Shortcut for /poi track");
+        send(source, gray("  /untrack <#> [...]") + "Shortcut for /poi untrack");
         send(source, "");
         send(source, gray("Run ") + "/world help" + gray(" or ") + "/group help" + gray(" for more."));
         MutableComponent website = Component.literal("Website: ").withStyle(ChatFormatting.GRAY)
@@ -732,6 +761,27 @@ public final class PoiCommand {
         CompletableFuture.runAsync(() -> refreshPoiList(new ApiClient(), worldId));
     }
 
+    /** Refreshes the POI list and restores any previously tracked POIs from config. */
+    public static void refreshAndRestoreTrackedAsync(String worldId) {
+        if (worldId == null || worldId.isBlank()) return;
+        CompletableFuture.runAsync(() -> {
+            refreshPoiList(new ApiClient(), worldId);
+            restoreTrackedPois();
+        });
+    }
+
+    private static void restoreTrackedPois() {
+        List<String> savedIds = PoiConfig.get().getTrackedPoiIds();
+        if (savedIds.isEmpty()) return;
+        List<ApiModels.WorldItem> allPois = PoiSession.get().getLastPoiList();
+        for (String id : savedIds) {
+            allPois.stream()
+                    .filter(p -> id.equals(p.id))
+                    .findFirst()
+                    .ifPresent(PoiSession.get()::addTrackedPoi);
+        }
+    }
+
     /** Returns the group name that contains this POI, or null if it's at root level. */
     private static String findGroupName(List<ApiModels.WorldItem> items, ApiModels.WorldItem target) {
         for (ApiModels.WorldItem item : items) {
@@ -821,6 +871,13 @@ public final class PoiCommand {
             return 0;
         }
         PoiSession.get().addTrackedPoi(poi);
+        if (poi.id != null) {
+            PoiConfig cfg = PoiConfig.get();
+            if (!cfg.getTrackedPoiIds().contains(poi.id)) {
+                cfg.getTrackedPoiIds().add(poi.id);
+                cfg.save();
+            }
+        }
         send(source, ok("Now tracking: " + poi.name));
         send(source, gray("  " + formatCoords(poi.coords) + " — " + dimensionLabel(poi.dimension)));
         return 1;
@@ -842,14 +899,142 @@ public final class PoiCommand {
             return 0;
         }
         PoiSession.get().removeTrackedPoi(number);
+        if (poi.id != null) {
+            PoiConfig cfg = PoiConfig.get();
+            cfg.getTrackedPoiIds().remove(poi.id);
+            cfg.save();
+        }
         send(source, ok("Stopped tracking: " + poi.name));
         return 1;
     }
 
+    private static int executeTrackNumbers(FabricClientCommandSource source, String numbersStr) {
+        List<Integer> numbers = parseNumbers(source, numbersStr);
+        if (numbers == null) return 0;
+        int result = 1;
+        for (int number : numbers) {
+            result = executeTrack(source, number);
+        }
+        return result;
+    }
+
+    private static int executeUntrackNumbers(FabricClientCommandSource source, String numbersStr) {
+        List<Integer> numbers = parseNumbers(source, numbersStr);
+        if (numbers == null) return 0;
+        int result = 1;
+        for (int number : numbers) {
+            result = executeUntrack(source, number);
+        }
+        return result;
+    }
+
+    private static List<Integer> parseNumbers(FabricClientCommandSource source, String input) {
+        List<Integer> numbers = new ArrayList<>();
+        for (String part : input.trim().split("\\s+")) {
+            try {
+                int n = Integer.parseInt(part);
+                if (n < 1) {
+                    send(source, err("Numbers must be 1 or greater."));
+                    return null;
+                }
+                numbers.add(n);
+            } catch (NumberFormatException e) {
+                send(source, err("Invalid number: " + part));
+                return null;
+            }
+        }
+        if (numbers.isEmpty()) {
+            send(source, err("Please provide at least one number."));
+            return null;
+        }
+        return numbers;
+    }
+
     private static int executeTrackClear(FabricClientCommandSource source) {
         PoiSession.get().clearTrackedPois();
+        PoiConfig cfg = PoiConfig.get();
+        cfg.getTrackedPoiIds().clear();
+        cfg.save();
         send(source, ok("All tracking cleared."));
         return 1;
+    }
+
+    // ── /poi find ─────────────────────────────────────────────────────────────
+
+    private static int executeFind(FabricClientCommandSource source, String query) {
+        List<ApiModels.WorldItem> allPois = PoiSession.get().getLastPoiList();
+        if (allPois.isEmpty()) {
+            send(source, err("No POIs loaded yet. Run /poi list first."));
+            return 0;
+        }
+
+        String trimmedQuery = query.trim();
+
+        record ScoredPoi(ApiModels.WorldItem poi, int score) {}
+        List<ScoredPoi> scored = allPois.stream()
+                .map(p -> new ScoredPoi(p, fuzzyScore(p, trimmedQuery)))
+                .filter(sp -> sp.score() > 0)
+                .sorted(Comparator.comparingInt(ScoredPoi::score).reversed())
+                .toList();
+
+        if (scored.isEmpty()) {
+            send(source, gray("No POIs match \"" + trimmedQuery + "\"."));
+            return 1;
+        }
+
+        int shown = Math.min(scored.size(), PAGE_SIZE);
+        String resultCount = scored.size() == 1 ? "1 result" : scored.size() + " results";
+        send(source, header("Find: " + trimmedQuery + " (" + resultCount + ")"));
+        for (int i = 0; i < shown; i++) {
+            ApiModels.WorldItem poi = scored.get(i).poi();
+            int globalNum = PoiSession.get().getListNumber(poi);
+            sendPoiLineNumbered(source, globalNum, poi);
+        }
+        if (scored.size() > PAGE_SIZE) {
+            send(source, gray("Showing top " + PAGE_SIZE + " of " + scored.size() + ". Narrow your search for more."));
+        } else {
+            send(source, gray("Numbers match /poi list — use /poi track <#> to track."));
+        }
+        return 1;
+    }
+
+    private static int fuzzyScore(ApiModels.WorldItem poi, String query) {
+        String q = query.toLowerCase();
+        int nameScore = scoreText(poi.name != null ? poi.name.toLowerCase() : "", q);
+        int descScore = scoreText(poi.description != null ? poi.description.toLowerCase() : "", q) / 2;
+        return nameScore + descScore;
+    }
+
+    private static int scoreText(String text, String query) {
+        if (text.isEmpty()) return 0;
+
+        // Exact match or full substring
+        if (text.equals(query)) return 1000;
+        if (text.contains(query)) return 500;
+
+        // Word-level: each query word found as substring in text
+        String[] queryWords = query.split("\\s+");
+        int wordScore = 0;
+        for (String word : queryWords) {
+            if (word.isEmpty()) continue;
+            if (text.contains(word)) {
+                wordScore += 100;
+            } else {
+                // Prefix match: any text token starts with this query word
+                for (String token : text.split("\\s+")) {
+                    if (token.startsWith(word)) { wordScore += 50; break; }
+                }
+            }
+        }
+        if (wordScore > 0) return wordScore;
+
+        // Subsequence fallback: all non-space query chars must appear in order
+        String compact = query.replace(" ", "");
+        int qi = 0;
+        for (int ti = 0; ti < text.length() && qi < compact.length(); ti++) {
+            if (text.charAt(ti) == compact.charAt(qi)) qi++;
+        }
+        return qi == compact.length() ? qi : 0;
     }
 
     // ── Utilities ──────────────────────────────────────────────────────────────
