@@ -79,6 +79,10 @@ public final class PoiSession {
         return lastPoiList.size();
     }
 
+    public List<ApiModels.WorldItem> getLastPoiList() {
+        return lastPoiList;
+    }
+
     /**
      * Returns the 1-based position of the given POI in the last loaded list,
      * or -1 if it isn't in the list (e.g. list hasn't been refreshed since tracking).
