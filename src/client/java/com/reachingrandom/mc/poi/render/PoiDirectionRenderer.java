@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.reachingrandom.mc.poi.api.ApiModels;
 import com.reachingrandom.mc.poi.command.PoiSession;
+import com.reachingrandom.mc.poi.config.PoiConfig;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
@@ -21,6 +22,7 @@ public class PoiDirectionRenderer {
     private static final double INDICATOR_DISTANCE = 12.0;
 
     public static void render(LevelRenderContext context) {
+        if (PoiConfig.get().isOffMode()) return;
         List<ApiModels.WorldItem> tracked = PoiSession.get().getTrackedPois();
         if (tracked.isEmpty()) return;
 

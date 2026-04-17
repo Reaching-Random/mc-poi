@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reachingrandom.com/schemas/poi-state-v1.json",
+  "title": "POI Tracker State v1",
+  "description": "Shared data format for the mc-poi Fabric mod and the reachingrandom.com POI Tracker. Used for offline local storage in the mod and for import/export on the site. Both tools can read and write files in this format interchangeably.",
+  "type": "object",
+  "required": ["worlds"],
+  "properties": {
+    "version": {
+      "description": "Schema version. Currently 1. Increment when breaking changes are made.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "worlds": {
+      "description": "All tracked Minecraft worlds.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/World" }
+    }
+  },
+  "$defs": {
+    "Coords": {
+      "description": "A set of Minecraft coordinates. At least one of x, y, z must be present.",
+      "type": "object",
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      },
+      "minProperties": 1,
+      "additionalProperties": false
+    },
+    "Dimension": {
+      "description": "Minecraft dimension identifier.",
+      "type": "string",
+      "enum": ["overworld", "nether", "end"]
+    },
+    "POI": {
+      "description": "A single Point of Interest.",
+      "type": "object",
+      "required": ["type", "id", "name"],
+      "properties": {
+        "type":          { "const": "poi" },
+        "id":            { "type": "string", "minLength": 1 },
+        "name":          { "type": "string", "minLength": 1 },
+        "description":   { "type": "string" },
+        "dimension":     { "$ref": "#/$defs/Dimension" },
+        "coords":        { "oneOf": [{ "$ref": "#/$defs/Coords" }, { "type": "null" }] },
+        "nearestPortal": { "oneOf": [{ "$ref": "#/$defs/Coords" }, { "type": "null" }] },
+        "created":       { "type": "string" },
+        "modified":      { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Group": {
+      "description": "A named collection of POIs.",
+      "type": "object",
+      "required": ["type", "id", "name"],
+      "properties": {
+        "type":       { "const": "group" },
+        "id":         { "type": "string", "minLength": 1 },
+        "name":       { "type": "string", "minLength": 1 },
+        "isExpanded": { "type": "boolean" },
+        "items": {
+          "description": "POIs belonging to this group.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/POI" }
+        },
+        "created":  { "type": "string" },
+        "modified": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "WorldItem": {
+      "description": "Either a POI or a Group, discriminated by the 'type' field.",
+      "oneOf": [
+        { "$ref": "#/$defs/POI" },
+        { "$ref": "#/$defs/Group" }
+      ]
+    },
+    "World": {
+      "description": "A Minecraft world containing POIs and groups.",
+      "type": "object",
+      "required": ["id", "name", "items"],
+      "properties": {
+        "id":       { "type": "string", "minLength": 1 },
+        "name":     { "type": "string", "minLength": 1 },
+        "seed":     { "type": "string", "description": "World seed stored as a string to safely handle large 64-bit values." },
+        "items": {
+          "description": "Top-level items: ungrouped POIs and Groups (which contain their own POIs).",
+          "type": "array",
+          "items": { "$ref": "#/$defs/WorldItem" }
+        },
+        "created":  { "type": "string" },
+        "modified": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

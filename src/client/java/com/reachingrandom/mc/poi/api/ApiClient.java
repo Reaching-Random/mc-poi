@@ -16,6 +16,10 @@ import java.time.Duration;
  * Thin wrapper around Java's HttpClient for the reaching-random POI API.
  * All calls are synchronous (intended to be run off the main thread via
  * CompletableFuture in PoiCommand).
+ *
+ * <p>Construct with {@link #ApiClient()} to use the API key from {@link PoiConfig},
+ * or with {@link #ApiClient(String)} to supply a key directly (e.g. for one-shot
+ * operations like {@code /poi download} that don't persist the key).
  */
 public class ApiClient {
 
@@ -25,6 +29,26 @@ public class ApiClient {
             .version(HttpClient.Version.HTTP_1_1) // Force HTTP 1.1 for dev server compatibility
             .connectTimeout(Duration.ofSeconds(10))
             .build();
+
+    /** If non-null, used instead of the key stored in {@link PoiConfig}. */
+    private final String apiKeyOverride;
+
+    /** Uses the API key from {@link PoiConfig} (normal usage). */
+    public ApiClient() {
+        this.apiKeyOverride = null;
+    }
+
+    /**
+     * Uses the given key instead of the one in {@link PoiConfig}.
+     * The key is never persisted to config — suitable for one-shot operations.
+     */
+    public ApiClient(String apiKeyOverride) {
+        this.apiKeyOverride = apiKeyOverride;
+    }
+
+    private String effectiveApiKey() {
+        return apiKeyOverride != null ? apiKeyOverride : PoiConfig.get().apiKey;
+    }
 
     // ── Worlds ─────────────────────────────────────────────────────────────────
 
@@ -67,13 +91,29 @@ public class ApiClient {
         return GSON.fromJson(json, ApiModels.CreateGroupResponse.class);
     }
 
+    public void deletePoi(String worldId, String poiId) throws ApiException {
+        delete("/api/mc/poi/worlds/" + worldId + "/pois/" + poiId);
+    }
+
     // ── HTTP helpers ───────────────────────────────────────────────────────────
+
+    private void delete(String path) throws ApiException {
+        PoiConfig cfg = PoiConfig.get();
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(cfg.getApiBaseUrl() + path))
+                .header("Authorization", "Bearer " + effectiveApiKey())
+                .header("Accept", "application/json")
+                .DELETE()
+                .timeout(Duration.ofSeconds(15))
+                .build();
+        send(req); // response body unused for DELETE
+    }
 
     private String get(String path) throws ApiException {
         PoiConfig cfg = PoiConfig.get();
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(cfg.getApiBaseUrl() + path))
-                .header("Authorization", "Bearer " + cfg.apiKey)
+                .header("Authorization", "Bearer " + effectiveApiKey())
                 .header("Accept", "application/json")
                 .GET()
                 .timeout(Duration.ofSeconds(15))
@@ -85,7 +125,7 @@ public class ApiClient {
         PoiConfig cfg = PoiConfig.get();
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(cfg.getApiBaseUrl() + path))
-                .header("Authorization", "Bearer " + cfg.apiKey)
+                .header("Authorization", "Bearer " + effectiveApiKey())
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody))

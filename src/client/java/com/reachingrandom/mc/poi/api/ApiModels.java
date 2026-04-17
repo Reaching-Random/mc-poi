@@ -1,9 +1,11 @@
 package com.reachingrandom.mc.poi.api;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Plain data classes matching the reaching-random API JSON shapes.
+ * Plain data classes matching the reaching-random API JSON shapes AND the
+ * local AppState file format (poi-state-v1.json).
  * Gson deserializes directly into these; no getters/setters needed.
  */
 public final class ApiModels {
@@ -49,6 +51,11 @@ public final class ApiModels {
     }
 
     // ── Shared item types ──────────────────────────────────────────────────────
+
+    /**
+     * Full world detail including items. Used by the API and also as the
+     * per-world entry in the local {@link AppState} file.
+     */
     public static class WorldDetail {
         public String id;
         public String name;
@@ -58,21 +65,36 @@ public final class ApiModels {
         public String modified;
     }
 
+    /**
+     * A single POI or Group, as returned by the API and stored in AppState files.
+     * The {@code type} field distinguishes them: {@code "poi"} or {@code "group"}.
+     *
+     * <p>Fields present on POIs only: {@code description}, {@code dimension},
+     * {@code coords}, {@code nearestPortal}.
+     * Fields present on Groups only: {@code items}, {@code isExpanded}.
+     */
     public static class WorldItem {
         /** "poi" or "group" */
         public String type;
 
-        // --- POI fields ---
+        // ── Common ────────────────────────────────────────────────────────────
         public String id;
         public String name;
-        public String description;
-        public String dimension;
-        public Coords coords;
         public String created;
         public String modified;
 
-        // --- Group fields ---
+        // ── POI fields ────────────────────────────────────────────────────────
+        public String description;
+        public String dimension;
+        public Coords coords;
+        /** Nearest Nether portal coordinates. Preserved from AppState files;
+         *  not captured by any mod command yet. */
+        public Coords nearestPortal;
+
+        // ── Group fields ──────────────────────────────────────────────────────
         public List<WorldItem> items;
+        /** UI expand/collapse hint used by the website. Preserved as-is. */
+        public Boolean isExpanded;
     }
 
     public static class Coords {
@@ -124,5 +146,17 @@ public final class ApiModels {
     // ── Error envelope ────────────────────────────────────────────────────────
     public static class ErrorResponse {
         public String error;
+    }
+
+    // ── Local offline file format (poi-state-v1.json) ─────────────────────────
+
+    /**
+     * Top-level envelope for the local offline data file.
+     * Matches the {@code AppState} format used by reachingrandom.com,
+     * so files are interchangeable with the site's import/export feature.
+     */
+    public static class AppState {
+        public List<WorldDetail> worlds = new ArrayList<>();
+        public int version = 1;
     }
 }

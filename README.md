@@ -4,121 +4,235 @@
 [![Fabric API](https://img.shields.io/badge/Fabric-0.18.5-green.svg)](https://fabricmc.net/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**POI Tracker** is a powerful, cloud-synced Minecraft mod built with the Fabric API. It allows you to save, categorize, and manage your Points of Interest (POIs) directly in-game and synchronize them with the [Reaching Random](https://reachingrandom.com/mc/poi) website.
+**POI Tracker** is a Minecraft mod built with the Fabric API that lets you save, organize, and navigate to Points of Interest (POIs) directly in-game. It works **completely offline** out of the box and can optionally sync with your [Reaching Random](https://reachingrandom.com/mc/poi) account.
 
 ---
 
-## 🚀 Features
+## Features
 
-- **🌐 Cloud Sync**: Your POIs are saved to your Reaching Random account, allowing you to view and share them from anywhere.
-- **📁 Multi-World & Groups**: Organize your POIs by world entry and nested groups (categories).
-- **🌱 Seed Detection**: Automatically identifies singleplayer worlds by their seed for seamless selection.
-- **🌌 Dimension Support**: Tracks whether a POI is in the Overworld, Nether, or The End.
-- **📍 Multi-POI Tracking**: Track multiple POIs simultaneously, each with its own 3D direction indicator.
-- **💻 Clean CLI**: A structured and intuitive command interface.
-
----
-
-## 🛠️ Installation
-
-1.  Ensure you have **Fabric Loader** installed for Minecraft **26.1**.
-2.  Download the latest `points-of-interest-*.jar` from the [Releases](https://github.com/Reaching-Random/mc-poi/releases) page.
-3.  Place the JAR file in your Minecraft `mods/` folder.
-4.  (Optional but Recommended) Install the **Fabric API** mod.
+- **Offline by default** — No account required. POIs are stored locally in a JSON file compatible with the Reaching Random website's import/export format.
+- **Cloud sync** — Connect your Reaching Random account to sync POIs across devices and view them on the website.
+- **Download snapshot** — Fetch your cloud data to a local file with `/poi download` for offline access or backup.
+- **Multi-World & Groups** — Organize POIs by world and nested groups (categories).
+- **Seed Detection** — Automatically identifies singleplayer worlds by their seed for seamless selection.
+- **Dimension Support** — Tracks whether a POI is in the Overworld, Nether, or The End.
+- **Multi-POI Tracking** — Track multiple POIs simultaneously, each with its own 3D direction indicator.
+- **Fuzzy Search** — Find POIs by name or description with `/poi find`.
+- **Schema-validated storage** — Local data files are validated against a versioned JSON schema on load to catch corruption early.
 
 ---
 
-## ⚙️ Setup
+## Installation
 
-Before you can sync POIs, you need an API key:
+1. Ensure you have **Fabric Loader** installed for Minecraft **26.1**.
+2. Download the latest `points-of-interest-*.jar` from the [Releases](https://github.com/Reaching-Random/mc-poi/releases) page.
+3. Place the JAR file in your Minecraft `mods/` folder.
+4. (Optional but recommended) Install the **Fabric API** mod.
 
-1.  Log in to [Reaching Random](https://reachingrandom.com).
-2.  Go to your **Settings** and copy your **POI Tracker API Key**.
-3.  In Minecraft, run:
-    ```mcfunction
-    /poi setkey <your-api-key>
-    ```
+The mod works immediately after installation — no configuration needed for offline use.
 
 ---
 
-## 🎮 Basic Commands
+## Storage Modes
+
+The mod has two storage modes, selectable at any time:
+
+| Mode | Command | Description |
+|------|---------|-------------|
+| **Offline** (default) | `/poi offline` | POIs saved to a local JSON file. No internet connection or account needed. |
+| **Online** | `/poi online` | POIs synced to your Reaching Random account via the API. Requires an API key. |
+
+Switching modes is instant and non-destructive — your offline data is never modified when switching to online mode, and vice versa.
+
+### Offline data files
+
+Local data lives at:
+```
+{minecraft-config}/poi/data/{playerUUID}-{profileKey}.json
+```
+
+The `profileKey` is:
+- `offline` for pure local use (the default)
+- A 12-character hash of your API key for data downloaded with `/poi download`
+
+Files use the same JSON format as the Reaching Random website's import/export feature, so they're fully interchangeable.
+
+---
+
+## Quick Start (Offline)
+
+```mcfunction
+/world add                    # Create a world entry (uses current world name + seed)
+/poi add Diamond Vein         # Save your current position as a POI
+/poi list                     # List POIs in the current dimension
+/poi track 1                  # Show a 3D direction arrow to POI #1
+```
+
+---
+
+## Quick Start (Online / Cloud Sync)
+
+1. Log in to [Reaching Random](https://reachingrandom.com) and copy your **POI Tracker API Key** from Settings.
+2. In Minecraft:
+```mcfunction
+/poi setkey <your-api-key>    # Saves key and switches to online mode
+/world list                   # Lists your cloud worlds (auto-selects if seed matches)
+/poi add "My Base"            # Saves to the cloud immediately
+```
+
+### Download a cloud snapshot
+
+To take your cloud data offline (backup, or offline play):
+```mcfunction
+/poi download <your-api-key>  # Downloads all worlds + POIs to a local file
+/poi offline                  # Switch to the downloaded file
+```
+
+The downloaded file is tied to your API key via a hash — you can switch between multiple accounts' snapshots independently.
+
+---
+
+## Commands
+
+### Storage & Setup
+
+| Command | Description |
+|---------|-------------|
+| `/poi status` | Show current storage mode, data file, and world selection |
+| `/poi offline` | Switch to offline storage (no API key needed) |
+| `/poi online` | Switch to online storage (requires API key) |
+| `/poi setkey <key>` | Save API key and switch to online mode |
+| `/poi download <key>` | Download cloud data to a local file (key not persisted) |
+| `/poi reset` | Clear all config and switch back to offline mode |
 
 ### World Management
-- `/world list [page]`: Show your saved worlds (paginated).
-- `/world add [name]`: Create a new world record.
-- `/world select <#>`: Select a world from the list.
-- `/world select`: Auto-select based on the current world seed.
-- `/world help`: Show all world management commands.
+
+| Command | Description |
+|---------|-------------|
+| `/world list [page]` | List your saved worlds |
+| `/world add [name]` | Create a new world entry (auto-fills name and seed) |
+| `/world select [#]` | Select a world (auto-selects by seed if no number given) |
+| `/world clear` | Deselect the current world |
+| `/worlds [page]` | Alias for `/world list` |
 
 ### Group Management
-- `/group list [page]`: List categories/groups in the current world. Click `[ ]` next to a group to select it; click `[*]` to deselect.
-- `/group add <name>`: Create a new group.
-- `/group select <#>`: Focus on a group (new POIs will be added here).
-- `/group clear`: Deselect the current group.
+
+| Command | Description |
+|---------|-------------|
+| `/group list [page]` | List groups in the current world |
+| `/group add <name>` | Create a new group and select it |
+| `/group select <#>` | Select a group (new POIs go here) |
+| `/group clear` | Deselect group (POIs added at root level) |
+| `/groups [page]` | Alias for `/group list` |
 
 ### POI Management
-- `/poi add <name> [desc]`: Add a POI at your current location.
-- `/poi list [page]`: List POIs **in your current dimension** (Overworld, Nether, or End). Click `[ ]` to start tracking; click `[*]` to stop.
-- `/poi list all [page]`: List POIs across **all dimensions**.
-- `/poi list group <#> [page]`: List POIs within a specific group.
-- `/poi track`: List all currently tracked POIs (numbers match `/pois` for easy reference).
-- `/poi track <#>`: Add a POI from the last list to tracked POIs (multiple allowed).
-- `/poi untrack <#>`: Remove a POI from tracked (use the number shown in `/poi list`).
-- `/poi track clear`: Stop tracking all POIs.
-- `/poi help`: Show general help.
-- `/poi reset`: Wipe all local configs and API key.
 
-### Aliases
-- `/worlds [page]` → `/world list [page]`
-- `/groups [page]` → `/group list [page]`
-- `/pois [page]` → `/poi list [page]` (current dimension only)
-- `/pois all [page]` → `/poi list all [page]` (all dimensions)
+| Command | Description |
+|---------|-------------|
+| `/poi add <name> [desc]` | Add a POI at your current location |
+| `/poi list [page]` | List POIs in your current dimension |
+| `/poi list all [page]` | List POIs across all dimensions |
+| `/poi list group <#> [page]` | List POIs in a specific group |
+| `/poi find <words>` | Fuzzy-search POIs by name or description |
+| `/poi track` | Show all tracked POIs |
+| `/poi track <#> [# ...]` | Start tracking one or more POIs |
+| `/poi untrack <#> [# ...]` | Stop tracking one or more POIs |
+| `/poi track clear` | Stop tracking all POIs |
+| `/poi help` | Show command help (includes current storage mode) |
+| `/pois [page]` | Alias for `/poi list` |
+| `/pois all [page]` | Alias for `/poi list all` |
+| `/track <#> [...]` | Alias for `/poi track` |
+| `/untrack <#> [...]` | Alias for `/poi untrack` |
 
 ---
 
-## 📖 List Pagination
+## List Pagination
 
 Commands that return lists support pagination (8 items per page). When a list spans multiple pages, a navigation bar appears at the bottom:
 
-`[◀ Prev]  Page 1/2  [Next ▶]`
+```
+[◀ Prev]  Page 1/2  [Next ▶]
+```
 
 - **Click to navigate**: Click **[◀ Prev]** or **[Next ▶]** directly in chat — no typing needed.
-- **Jump to page**: Append a page number to any list command (e.g. `/poi list 3`, `/worlds 2`, `/pois 2`).
-- POI numbers are **global** — the same POI always has the same number whether you're viewing your current dimension or all dimensions, so `/poi track 12` always refers to the same POI.
-- **Clickable track toggles**: In `/poi list` and `/pois`, each row shows `[ ]` (untracked) or `[*]` (tracked). Click either the indicator or the POI name to toggle tracking without typing a command. The same numbers are used by `/poi track` and `/poi untrack`.
-- **Clickable group toggles**: In `/group list` and `/groups`, click `[ ]` to select a group or `[*]` to deselect it.
-- **Clickable URLs**: URLs shown in chat (e.g. in `/poi help`) can be clicked to copy them to your clipboard.
-
+- **Jump to page**: Append a page number (e.g. `/poi list 3`, `/worlds 2`).
+- POI numbers are **global** — the same POI always has the same number regardless of whether you're filtering by dimension, so `/poi track 12` always refers to the same POI.
+- **Clickable track toggles**: Each row shows `[ ]` (untracked) or `[*]` (tracked). Click either the indicator or the POI name to toggle tracking.
+- **Clickable group toggles**: In `/group list`, click `[ ]` to select a group or `[*]` to deselect it.
+- **Clickable file paths**: In `/poi status` and `/poi offline`, the data file path is a clickable link that opens the file in your OS default app.
 
 ---
 
-## 👩‍💻 Development
+## Data File Format
+
+Offline data files use the same JSON schema as the Reaching Random website's import/export feature (`poi-state-v1.json`), making them fully interchangeable:
+
+```json
+{
+  "version": 1,
+  "worlds": [
+    {
+      "id": "abc123...",
+      "name": "My Survival World",
+      "seed": "1234567890",
+      "created": "2024-01-01T00:00:00Z",
+      "modified": "2024-01-15T12:34:56Z",
+      "items": [
+        {
+          "type": "group",
+          "id": "grp001...",
+          "name": "Bases",
+          "items": [
+            {
+              "type": "poi",
+              "id": "poi001...",
+              "name": "Main Base",
+              "description": "Starter base with storage",
+              "dimension": "overworld",
+              "coords": { "x": 100, "y": 64, "z": -200 }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+The schema is validated on every file load. If the file fails validation, an error is shown in chat with instructions to restore from the website's export.
+
+---
+
+## Development
 
 ### Prerequisites
 - JDK 21+
 - Gradle (provided via `./gradlew`)
 
 ### Build
-To compile the mod and generate a JAR:
 ```bash
 ./gradlew build
 ```
+
+The build downloads the latest `poi-state-v1.json` schema from `reachingrandom.com` and bundles it in the JAR. If the server is unreachable, the committed fallback schema in `src/main/resources/schemas/` is used instead.
+
 The resulting JAR will be in `build/libs/`.
 
 ### Run Locally
-To launch a development instance of Minecraft:
 ```bash
 ./gradlew runClient
 ```
 
 ### Local API Override
-For development against a local backend, create a `.env.development` file in the root:
-```env
-REACHING_RANDOM_API_ROOT=http://localhost:3000
+To develop against a local backend, set the JVM property:
 ```
+-Dreaching.random.api.root=http://localhost:3000
+```
+
+Or add it to your run configuration.
 
 ---
 
-## 📜 License
+## License
 
 This project is licensed under the [MIT License](LICENSE).
