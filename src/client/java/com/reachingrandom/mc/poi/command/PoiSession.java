@@ -123,6 +123,14 @@ public final class PoiSession {
         return removed ? poi : null;
     }
 
+    /**
+     * Removes a tracked POI by its ID. Used after deletion so the direction
+     * renderer stops referencing a POI that no longer exists.
+     */
+    public void removeTrackedPoiById(String poiId) {
+        if (poiId != null) trackedPois.removeIf(p -> poiId.equals(p.id));
+    }
+
     public boolean isTracked(ApiModels.WorldItem poi) {
         if (poi.id != null) {
             return trackedPois.stream().anyMatch(p -> poi.id.equals(p.id));

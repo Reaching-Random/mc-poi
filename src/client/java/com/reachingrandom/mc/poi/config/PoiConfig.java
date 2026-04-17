@@ -26,14 +26,33 @@ public class PoiConfig {
     private static PoiConfig instance;
     private transient Path currentFilePath;
 
-    // ── fields (serialized to JSON) ────────────────────────────────────────────
-    private static final String HELP_PATH = "/mc/poi/help";
+    // ── Serialized fields ──────────────────────────────────────────────────────
+
     public String apiBaseUrl = "https://reachingrandom.com";
     public String apiKey = "";
     public String currentWorldId = null;
     public String currentGroupId = null;
     public String currentGroupName = null;
     public List<String> trackedPoiIds = new ArrayList<>();
+
+    /**
+     * Storage mode: {@code "online"} (uses the reaching-random API) or
+     * {@code "offline"} (uses a local JSON file in AppState format).
+     * Defaults to {@code "offline"} so the mod is usable without an API key.
+     */
+    public String storageMode = "offline";
+
+    /**
+     * Identifies which offline data file to use.
+     * <ul>
+     *   <li>{@code "offline"} → {@code {uuid}-offline.json} (pure local use)</li>
+     *   <li>12-char SHA-256 prefix of an API key → {@code {uuid}-{hash}.json}
+     *       (created by {@code /poi download})</li>
+     * </ul>
+     */
+    public String offlineProfileKey = "offline";
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
 
     public List<String> getTrackedPoiIds() {
         if (trackedPoiIds == null) trackedPoiIds = new ArrayList<>();
@@ -49,23 +68,39 @@ public class PoiConfig {
         return apiBaseUrl != null ? apiBaseUrl : "https://reachingrandom.com";
     }
 
-    // ── singleton ──────────────────────────────────────────────────────────────
+    public boolean hasApiKey() {
+        return apiKey != null && !apiKey.isBlank();
+    }
+
+    public boolean isOnlineMode() {
+        return "online".equals(storageMode);
+    }
+
+    /** Returns true when the mod is explicitly disabled via {@code /poi off}. */
+    public boolean isOffMode() {
+        return "off".equals(storageMode);
+    }
+
+    // ── Singleton ──────────────────────────────────────────────────────────────
+
     public static PoiConfig get() {
         Minecraft mc = Minecraft.getInstance();
         if (mc == null) return load(POI_DIR.resolve("default-profile.json"));
-        
+
         String suffix = (mc.getUser() != null)
                 ? mc.getUser().getProfileId().toString()
                 : "default";
 
-        if (instance == null || instance.currentFilePath == null || !instance.currentFilePath.getFileName().toString().contains(suffix)) {
+        if (instance == null || instance.currentFilePath == null
+                || !instance.currentFilePath.getFileName().toString().contains(suffix)) {
             Path path = POI_DIR.resolve(suffix + "-profile.json");
             instance = load(path);
         }
         return instance;
     }
 
-    // ── persistence ────────────────────────────────────────────────────────────
+    // ── Persistence ────────────────────────────────────────────────────────────
+
     private static PoiConfig load(Path path) {
         if (!Files.exists(path)) {
             PoiConfig defaults = new PoiConfig();
@@ -97,10 +132,5 @@ public class PoiConfig {
         } catch (IOException e) {
             LOGGER.error("[POI] Failed to save config", e);
         }
-    }
-
-    // ── helpers ────────────────────────────────────────────────────────────────
-    public boolean hasApiKey() {
-        return apiKey != null && !apiKey.isBlank();
     }
 }

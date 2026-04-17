@@ -19,10 +19,12 @@ public class PointsofinterestClient implements ClientModInitializer {
 		LevelRenderEvents.BEFORE_GIZMOS.register(PoiDirectionRenderer::render);
 
 		// Auto-refresh the POI list whenever the player joins a world so that
-		// /poi track <#> works immediately without a manual /pois call first
+		// /poi track <#> works immediately without a manual /pois call first.
+		// Works in both online and offline storage modes — no API key required
+		// for offline mode.
 		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
 			PoiConfig cfg = PoiConfig.get();
-			if (cfg.hasApiKey() && cfg.currentWorldId != null) {
+			if (cfg.currentWorldId != null) {
 				PoiCommand.refreshAndRestoreTrackedAsync(cfg.currentWorldId);
 			}
 		});
