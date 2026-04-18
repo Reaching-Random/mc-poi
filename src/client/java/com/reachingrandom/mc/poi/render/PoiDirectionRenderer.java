@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.reachingrandom.mc.poi.api.ApiModels;
 import com.reachingrandom.mc.poi.command.PoiSession;
+import com.reachingrandom.mc.poi.config.PoiConfig;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
@@ -21,14 +22,12 @@ public class PoiDirectionRenderer {
     private static final double INDICATOR_DISTANCE = 12.0;
 
     public static void render(WorldRenderContext context) {
+        if (PoiConfig.get().isOffMode()) return;
         List<ApiModels.WorldItem> tracked = PoiSession.get().getTrackedPois();
         if (tracked.isEmpty()) return;
 
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
-
-        MultiBufferSource bufferSource = context.consumers();
-        if (bufferSource == null) return;
 
         // Determine the player's current dimension so we only render same-dimension POIs
         var dim = mc.player.level().dimension();
@@ -36,6 +35,9 @@ public class PoiDirectionRenderer {
         if (dim.equals(Level.NETHER)) currentDimension = "nether";
         else if (dim.equals(Level.END)) currentDimension = "end";
         else currentDimension = "overworld";
+
+        MultiBufferSource bufferSource = context.consumers();
+        if (bufferSource == null) return;
 
         Camera camera = mc.gameRenderer.getMainCamera();
         Vec3 cameraPos = camera.position();
