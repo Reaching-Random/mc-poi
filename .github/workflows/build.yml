@@ -17,7 +17,7 @@ jobs:
   build:
     uses: Reaching-Random/gh-actions/.github/workflows/minecraft-build.yml@main
     with:
-      minecraft_version: '26.1'
+      minecraft_version: '26.2'
       java_version: '25'
       create_release: ${{ inputs.build_type == 'Build & Release' }}
     permissions:

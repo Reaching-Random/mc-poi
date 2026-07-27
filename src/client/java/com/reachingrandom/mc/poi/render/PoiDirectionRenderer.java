@@ -8,9 +8,9 @@ import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix4f;
 
 import java.util.List;
 
@@ -18,6 +18,10 @@ public class PoiDirectionRenderer {
 
     private static final float LABEL_SCALE = 0.025f;
     private static final double INDICATOR_DISTANCE = 12.0;
+    /** Packed light (block+sky at max) so labels ignore world lighting. */
+    private static final int FULL_BRIGHT = 0x00F000F0;
+    private static final int BACKDROP_COLOR = 0x60000000;
+    private static final int NO_OUTLINE = 0;
 
     public static void render(LevelRenderContext context) {
         List<ApiModels.WorldItem> tracked = PoiSession.get().getTrackedPois();
@@ -26,18 +30,18 @@ public class PoiDirectionRenderer {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
 
-        Camera camera = mc.gameRenderer.getMainCamera();
+        Camera camera = mc.gameRenderer.mainCamera();
         Vec3 cameraPos = camera.position();
         Font font = mc.font;
         PoseStack poseStack = context.poseStack();
-        MultiBufferSource bufferSource = context.bufferSource();
+        SubmitNodeCollector collector = context.submitNodeCollector();
 
         for (ApiModels.WorldItem poi : tracked) {
-            renderPoi(poseStack, bufferSource, font, cameraPos, poi);
+            renderPoi(poseStack, collector, font, cameraPos, poi);
         }
     }
 
-    private static void renderPoi(PoseStack poseStack, MultiBufferSource bufferSource,
+    private static void renderPoi(PoseStack poseStack, SubmitNodeCollector collector,
                                    Font font, Vec3 cameraPos, ApiModels.WorldItem poi) {
         if (poi == null || poi.coords == null
                 || poi.coords.x == null || poi.coords.z == null) return;
@@ -72,17 +76,16 @@ public class PoiDirectionRenderer {
         // Line 1: POI name
         String name = poi.name;
         float halfWidthName = font.width(name) / 2f;
-        Matrix4f matrix = poseStack.last().pose();
-        font.drawInBatch(
-                name,
+        collector.submitText(
+                poseStack,
                 -halfWidthName, 0f,
-                0xFFFFFFFF,
+                Component.literal(name).getVisualOrderText(),
                 false,
-                matrix,
-                bufferSource,
                 Font.DisplayMode.SEE_THROUGH,
-                0x60000000,
-                0x00F000F0
+                FULL_BRIGHT,
+                0xFFFFFFFF,
+                BACKDROP_COLOR,
+                NO_OUTLINE
         );
 
         // Line 2: horizontal distance in blocks (more useful for navigation)
@@ -90,18 +93,16 @@ public class PoiDirectionRenderer {
         String distText = distBlocks + " blocks";
         float halfWidthDist = font.width(distText) / 2f;
         // Move down ~10 text units (font line height is ~9px at scale 1)
-        poseStack.translate(0, 10, 0);
-        Matrix4f matrix2 = poseStack.last().pose();
-        font.drawInBatch(
-                distText,
-                -halfWidthDist, 0f,
-                0xFFCCCCCC,
+        collector.submitText(
+                poseStack,
+                -halfWidthDist, 10f,
+                Component.literal(distText).getVisualOrderText(),
                 false,
-                matrix2,
-                bufferSource,
                 Font.DisplayMode.SEE_THROUGH,
-                0x60000000,
-                0x00F000F0
+                FULL_BRIGHT,
+                0xFFCCCCCC,
+                BACKDROP_COLOR,
+                NO_OUTLINE
         );
 
         poseStack.popPose();
