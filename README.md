@@ -1,7 +1,7 @@
 # POI Tracker — Minecraft Fabric Mod
 
-[![Minecraft Version](https://img.shields.io/badge/Minecraft-26.1-blue.svg)](https://www.minecraft.net/)
-[![Fabric API](https://img.shields.io/badge/Fabric-0.18.5-green.svg)](https://fabricmc.net/)
+[![Minecraft Version](https://img.shields.io/badge/Minecraft-26.3-blue.svg)](https://www.minecraft.net/)
+[![Fabric API](https://img.shields.io/badge/Fabric_API-0.161.0%2B26.3-green.svg)](https://fabricmc.net/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **POI Tracker** is a Minecraft mod built with the Fabric API that lets you save, organize, and navigate to Points of Interest (POIs) directly in-game. It works **completely offline** out of the box and can optionally sync with your [Reaching Random](https://reachingrandom.com/mc/poi) account.
@@ -24,10 +24,10 @@
 
 ## Installation
 
-1. Ensure you have **Fabric Loader** installed for Minecraft **26.1**.
+1. Ensure you have **Fabric Loader** installed for Minecraft **26.3**.
 2. Download the latest `points-of-interest-*.jar` from the [Releases](https://github.com/Reaching-Random/mc-poi/releases) page.
 3. Place the JAR file in your Minecraft `mods/` folder.
-4. (Optional but recommended) Install the **Fabric API** mod.
+4. (Optional but recommended) Install the **Fabric API** mod (0.161.0+26.3 or newer).
 
 The mod works immediately after installation — no configuration needed for offline use.
 

@@ -83,7 +83,7 @@ public class PoiDirectionRenderer {
 
         poseStack.pushPose();
         poseStack.translate(relX, relY, relZ);
-        poseStack.mulPose(Axis.YP.rotation(yaw));
+        poseStack.rotate(Axis.YP, yaw);
         poseStack.scale(-LABEL_SCALE, -LABEL_SCALE, LABEL_SCALE);
 
         // Line 1: POI name
