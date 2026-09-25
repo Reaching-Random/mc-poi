@@ -964,16 +964,18 @@ public final class PoiCommand {
 
     /**
      * Flattens a top-level item list (groups + root POIs) into a single ordered
-     * list of POIs.  Groups are expanded in-order; root POIs are included as-is.
+     * list of POIs.  All root (ungrouped) POIs come first, then each group's POIs
+     * in group order, matching the website.  Root POIs and groups can be
+     * interleaved in storage (new root POIs are appended after existing groups),
+     * so a plain in-order walk would scatter ungrouped POIs between groups.
      */
     private static List<ApiModels.WorldItem> flattenPois(List<ApiModels.WorldItem> items) {
         List<ApiModels.WorldItem> result = new ArrayList<>();
         for (ApiModels.WorldItem item : items) {
-            if ("group".equals(item.type)) {
-                if (item.items != null) result.addAll(item.items);
-            } else {
-                result.add(item);
-            }
+            if (!"group".equals(item.type)) result.add(item);
+        }
+        for (ApiModels.WorldItem item : items) {
+            if ("group".equals(item.type) && item.items != null) result.addAll(item.items);
         }
         return result;
     }
