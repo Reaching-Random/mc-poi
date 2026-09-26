@@ -15,6 +15,7 @@
 - **🌱 Seed Detection**: Automatically identifies singleplayer worlds by their seed for seamless selection.
 - **🌌 Dimension Support**: Tracks whether a POI is in the Overworld, Nether, or The End.
 - **📍 Multi-POI Tracking**: Track multiple POIs simultaneously, each with its own 3D direction indicator.
+- **🔎 Find**: `/poi find <text>` lists every POI whose name or description contains the text, nearest first, with the closest one marked.
 - **💻 Clean CLI**: A structured and intuitive command interface.
 
 ---
@@ -63,6 +64,7 @@ Before you can sync POIs, you need an API key:
 - `/poi track`: List all currently tracked POIs (numbers match `/pois` for easy reference).
 - `/poi track <#>`: Add a POI from the last list to tracked POIs (multiple allowed).
 - `/poi untrack <#>`: Remove a POI from tracked (use the number shown in `/poi list`).
+- `/poi find <text>` (or `/find <text>`): List POIs whose name or description contains the text, nearest first. The closest one in your dimension is marked `[Closest]`.
 - `/poi track clear`: Stop tracking all POIs.
 - `/poi help`: Show general help.
 - `/poi reset`: Wipe all local configs and API key.
