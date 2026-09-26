@@ -24,6 +24,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 
 import static com.mojang.brigadier.arguments.IntegerArgumentType.getInteger;
@@ -170,7 +171,7 @@ public final class PoiCommand {
                         .executes(ctx -> executeUntrackNumbers(ctx.getSource(),
                                 getString(ctx, "numbers")))))
 
-                // /poi find <query>   — fuzzy search against loaded POI list
+                // /poi find <text>   — POIs whose name/description contains the text
                 .then(literal("find")
                     .then(argument("query", StringArgumentType.greedyString())
                         .executes(ctx -> executeFind(ctx.getSource(),
@@ -234,6 +235,14 @@ public final class PoiCommand {
                             getString(ctx, "numbers"))))
         );
 
+        // /find <text> → /poi find
+        dispatcher.register(
+            literal("find")
+                .then(argument("query", StringArgumentType.greedyString())
+                    .executes(ctx -> executeFind(ctx.getSource(),
+                            getString(ctx, "query"))))
+        );
+
         // /untrack <number(s)> → /poi untrack
         dispatcher.register(
             literal("untrack")
@@ -275,7 +284,7 @@ public final class PoiCommand {
         send(source, gray("  /poi list group <#> [page]") + "List POIs in a specific group");
         send(source, gray("  /poi add <name> [desc]    ") + "Add POI (to current group if selected)");
         send(source, gray("  /poi delete <#>           ") + "Permanently delete a POI");
-        send(source, gray("  /poi find <words>         ") + "Fuzzy-search POIs by name/description");
+        send(source, gray("  /poi find <text>          ") + "List POIs containing text, closest first");
         send(source, gray("  /poi track                ") + "List all currently tracked POIs");
         send(source, gray("  /poi track <#> [# ...]    ") + "Track one or more POIs (from last list)");
         send(source, gray("  /poi untrack <#> [# ...]  ") + "Untrack one or more POIs");
@@ -285,6 +294,7 @@ public final class PoiCommand {
         send(source, gray("  /pois all         ") + "Shortcut for /poi list all");
         send(source, gray("  /track <#> [...]  ") + "Shortcut for /poi track");
         send(source, gray("  /untrack <#> [...] ") + "Shortcut for /poi untrack");
+        send(source, gray("  /find <text>      ") + "Shortcut for /poi find");
         send(source, "");
         send(source, gray("Run ") + "/world help" + gray(" or ") + "/group help" + gray(" for more."));
         MutableComponent website = Component.literal("Website: ").withStyle(ChatFormatting.GRAY)
@@ -1242,76 +1252,83 @@ public final class PoiCommand {
 
     // ── /poi find ─────────────────────────────────────────────────────────────
 
+    /**
+     * Lists every POI whose name or description contains {@code query}
+     * (case-insensitive).  Matches in the player's current dimension come first,
+     * nearest first, and the nearest one is marked [Closest]; matches in other
+     * dimensions or without coordinates follow in list order.  Numbers match
+     * /poi list, so /poi track &lt;#&gt; works on the results.
+     */
     private static int executeFind(FabricClientCommandSource source, String query) {
-        List<ApiModels.WorldItem> allPois = PoiSession.get().getLastPoiList();
-        if (allPois.isEmpty()) {
-            send(source, err("No POIs loaded yet. Run /poi list first."));
+        if (!checkReady(source)) return 0;
+        String worldId = requireCurrentWorld(source);
+        if (worldId == null) return 0;
+
+        String trimmedQuery = stripQuotes(query);
+        if (trimmedQuery.isEmpty()) {
+            send(source, err("Please provide a word to search for."));
             return 0;
         }
+        String needle = trimmedQuery.toLowerCase(Locale.ROOT);
 
-        String trimmedQuery = query.trim();
+        // Capture player position and dimension on the game thread before going async
+        Minecraft mc = Minecraft.getInstance();
+        boolean hasPlayer = mc.player != null;
+        double px = hasPlayer ? mc.player.getX() : 0;
+        double pz = hasPlayer ? mc.player.getZ() : 0;
+        String currentDimension = getDimension(mc);
 
-        record ScoredPoi(ApiModels.WorldItem poi, int score) {}
-        List<ScoredPoi> scored = allPois.stream()
-                .map(p -> new ScoredPoi(p, fuzzyScore(p, trimmedQuery)))
-                .filter(sp -> sp.score() > 0)
-                .sorted(Comparator.comparingInt(ScoredPoi::score).reversed())
-                .toList();
+        async(source, () -> {
+            PoiStorage storage = PoiStorageProvider.get();
+            List<ApiModels.WorldItem> allPois = flattenPois(storage.listItems(worldId));
 
-        if (scored.isEmpty()) {
-            send(source, gray("No POIs match \"" + trimmedQuery + "\"."));
-            return 1;
-        }
+            // Store the full list so numbers are global and /poi track <#> works
+            PoiSession.get().setLastPoiList(allPois);
 
-        int shown = Math.min(scored.size(), PAGE_SIZE);
-        String resultCount = scored.size() == 1 ? "1 result" : scored.size() + " results";
-        send(source, header("Find: " + trimmedQuery + " (" + resultCount + ")"));
-        for (int i = 0; i < shown; i++) {
-            ApiModels.WorldItem poi = scored.get(i).poi();
-            int globalNum = PoiSession.get().getListNumber(poi);
-            sendPoiLineNumbered(source, globalNum, poi);
-        }
-        if (scored.size() > PAGE_SIZE) {
-            send(source, gray("Showing top " + PAGE_SIZE + " of " + scored.size() + ". Narrow your search for more."));
-        } else {
-            send(source, gray("Numbers match /poi list — use /poi track <#> to track."));
-        }
+            record Match(ApiModels.WorldItem poi, int number, double distance) {}
+            List<Match> matches = new ArrayList<>();
+            for (int i = 0; i < allPois.size(); i++) {
+                ApiModels.WorldItem poi = allPois.get(i);
+                if (!containsIgnoreCase(poi.name, needle) && !containsIgnoreCase(poi.description, needle)) continue;
+                boolean sameDim = currentDimension.equals(poi.dimension)
+                        || (poi.dimension == null && "overworld".equals(currentDimension));
+                boolean hasCoords = poi.coords != null && poi.coords.x != null && poi.coords.z != null;
+                double distance = hasPlayer && sameDim && hasCoords
+                        ? Math.hypot(poi.coords.x - px, poi.coords.z - pz)
+                        : Double.NaN;
+                matches.add(new Match(poi, i + 1, distance));
+            }
+
+            if (matches.isEmpty()) {
+                send(source, gray("No POIs match \"" + trimmedQuery + "\"."));
+                return;
+            }
+
+            // Nearest first; POIs with no distance keep list order at the end (stable sort)
+            matches.sort(Comparator.comparingDouble(m -> Double.isNaN(m.distance()) ? Double.MAX_VALUE : m.distance()));
+
+            String resultCount = matches.size() == 1 ? "1 result" : matches.size() + " results";
+            send(source, header("Find: " + trimmedQuery + " (" + resultCount + ")"));
+            for (int i = 0; i < matches.size(); i++) {
+                Match m = matches.get(i);
+                MutableComponent suffix = null;
+                if (!Double.isNaN(m.distance())) {
+                    suffix = Component.literal(" " + Math.round(m.distance()) + "m")
+                            .withStyle(ChatFormatting.GRAY);
+                    if (i == 0) {
+                        suffix = Component.literal(" [Closest]").withStyle(ChatFormatting.GREEN)
+                                .append(suffix);
+                    }
+                }
+                sendPoiLineNumbered(source, m.number(), m.poi(), suffix);
+            }
+            send(source, gray("Numbers match /poi list — click [ ] or use /poi track <#> to track."));
+        });
         return 1;
     }
 
-    private static int fuzzyScore(ApiModels.WorldItem poi, String query) {
-        String q = query.toLowerCase();
-        int nameScore = scoreText(poi.name != null ? poi.name.toLowerCase() : "", q);
-        int descScore = scoreText(poi.description != null ? poi.description.toLowerCase() : "", q) / 2;
-        return nameScore + descScore;
-    }
-
-    private static int scoreText(String text, String query) {
-        if (text.isEmpty()) return 0;
-
-        if (text.equals(query))    return 1000;
-        if (text.contains(query))  return 500;
-
-        String[] queryWords = query.split("\\s+");
-        int wordScore = 0;
-        for (String word : queryWords) {
-            if (word.isEmpty()) continue;
-            if (text.contains(word)) {
-                wordScore += 100;
-            } else {
-                for (String token : text.split("\\s+")) {
-                    if (token.startsWith(word)) { wordScore += 50; break; }
-                }
-            }
-        }
-        if (wordScore > 0) return wordScore;
-
-        String compact = query.replace(" ", "");
-        int qi = 0;
-        for (int ti = 0; ti < text.length() && qi < compact.length(); ti++) {
-            if (text.charAt(ti) == compact.charAt(qi)) qi++;
-        }
-        return qi == compact.length() ? qi : 0;
+    private static boolean containsIgnoreCase(String text, String lowerNeedle) {
+        return text != null && text.toLowerCase(Locale.ROOT).contains(lowerNeedle);
     }
 
     // ── Readiness checks ──────────────────────────────────────────────────────
@@ -1401,6 +1418,12 @@ public final class PoiCommand {
     // ── POI chat rendering ────────────────────────────────────────────────────
 
     private static void sendPoiLineNumbered(FabricClientCommandSource source, int number, ApiModels.WorldItem poi) {
+        sendPoiLineNumbered(source, number, poi, null);
+    }
+
+    /** Renders a POI line, with {@code suffix} (if non-null) appended after the coordinates. */
+    private static void sendPoiLineNumbered(FabricClientCommandSource source, int number,
+                                            ApiModels.WorldItem poi, Component suffix) {
         boolean tracked   = PoiSession.get().isTracked(poi);
         String toggleCmd  = tracked ? "/poi untrack " + number : "/poi track " + number;
 
@@ -1421,6 +1444,9 @@ public final class PoiCommand {
             line.append(Component.literal(
                     " [" + formatCoords(poi.coords) + " — " + dimensionLabel(poi.dimension) + "]"
             ).withStyle(ChatFormatting.GRAY));
+        }
+        if (suffix != null) {
+            line.append(suffix);
         }
 
         sendComponent(source, line);
