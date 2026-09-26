@@ -17,7 +17,7 @@
 - **Seed Detection** — Automatically identifies singleplayer worlds by their seed for seamless selection.
 - **Dimension Support** — Tracks whether a POI is in the Overworld, Nether, or The End.
 - **Multi-POI Tracking** — Track multiple POIs simultaneously, each with its own 3D direction indicator.
-- **Fuzzy Search** — Find POIs by name or description with `/poi find`.
+- **Find** — `/poi find <text>` lists every POI whose name or description contains the text, nearest first, with the closest one marked.
 - **Schema-validated storage** — Local data files are validated against a versioned JSON schema on load to catch corruption early.
 
 ---
@@ -133,7 +133,7 @@ The downloaded file is tied to your API key via a hash — you can switch betwee
 | `/poi list [page]` | List POIs in your current dimension |
 | `/poi list all [page]` | List POIs across all dimensions |
 | `/poi list group <#> [page]` | List POIs in a specific group |
-| `/poi find <words>` | Fuzzy-search POIs by name or description |
+| `/poi find <text>` | List POIs whose name or description contains the text, nearest first; the closest in your dimension is marked `[Closest]` |
 | `/poi track` | Show all tracked POIs |
 | `/poi track <#> [# ...]` | Start tracking one or more POIs |
 | `/poi untrack <#> [# ...]` | Stop tracking one or more POIs |
@@ -143,6 +143,7 @@ The downloaded file is tied to your API key via a hash — you can switch betwee
 | `/pois all [page]` | Alias for `/poi list all` |
 | `/track <#> [...]` | Alias for `/poi track` |
 | `/untrack <#> [...]` | Alias for `/poi untrack` |
+| `/find <text>` | Alias for `/poi find` |
 
 ---
 
