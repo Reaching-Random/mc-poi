@@ -35,6 +35,9 @@ public class PoiConfig {
     public String currentGroupName = null;
     public List<String> trackedPoiIds = new ArrayList<>();
 
+    /** Whether placed/right-clicked campfires can be named into the "Campsites" group. */
+    public boolean campfireCampsites = true;
+
     /**
      * Storage mode: {@code "online"} (uses the reaching-random API) or
      * {@code "offline"} (uses a local JSON file in AppState format).

@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.reachingrandom.mc.poi.api.ApiClient;
 import com.reachingrandom.mc.poi.api.ApiModels;
+import com.reachingrandom.mc.poi.campsite.CampsiteIndex;
 import com.reachingrandom.mc.poi.config.PoiConfig;
 import com.reachingrandom.mc.poi.storage.LocalPoiStorage;
 import com.reachingrandom.mc.poi.storage.PoiStorage;
@@ -113,6 +114,14 @@ public final class PoiCommand {
                     .then(argument("key", StringArgumentType.greedyString())
                         .executes(ctx -> executeDownload(ctx.getSource(),
                                 getString(ctx, "key")))))
+
+                // /poi campfires [on|off]
+                .then(literal("campfires")
+                    .executes(ctx -> executeCampfires(ctx.getSource(), null))
+                    .then(literal("on")
+                        .executes(ctx -> executeCampfires(ctx.getSource(), true)))
+                    .then(literal("off")
+                        .executes(ctx -> executeCampfires(ctx.getSource(), false))))
 
                 // /poi groups
                 .then(literal("groups")
@@ -289,6 +298,7 @@ public final class PoiCommand {
         send(source, gray("  /poi track <#> [# ...]    ") + "Track one or more POIs (from last list)");
         send(source, gray("  /poi untrack <#> [# ...]  ") + "Untrack one or more POIs");
         send(source, gray("  /poi track clear          ") + "Stop tracking all POIs");
+        send(source, gray("  /poi campfires [on|off]   ") + "Name campfires to save them as Campsites");
         send(source, "");
         send(source, gray("  /pois             ") + "Shortcut for /poi list (current dimension)");
         send(source, gray("  /pois all         ") + "Shortcut for /poi list all");
@@ -329,6 +339,25 @@ public final class PoiCommand {
         return 1;
     }
 
+    // ── /poi campfires ─────────────────────────────────────────────────────────
+
+    private static int executeCampfires(FabricClientCommandSource source, Boolean enable) {
+        PoiConfig cfg = PoiConfig.get();
+        if (enable != null) {
+            cfg.campfireCampsites = enable;
+            cfg.save();
+        }
+        if (cfg.campfireCampsites) {
+            send(source, ok("Campfire campsites: ON"));
+            send(source, gray("  Place a campfire, or right-click one with an empty hand, to name it."));
+            send(source, gray("  Named campfires are saved in the \"" + CampsiteIndex.GROUP_NAME
+                    + "\" group; breaking one removes its POI."));
+        } else {
+            send(source, ok("Campfire campsites: OFF"));
+        }
+        return 1;
+    }
+
     // ── /poi status ────────────────────────────────────────────────────────────
 
     private static int executeStatus(FabricClientCommandSource source) {
@@ -354,6 +383,7 @@ public final class PoiCommand {
         if (cfg.currentGroupId != null) {
             send(source, gray("  Group:  " + (cfg.currentGroupName != null ? cfg.currentGroupName : cfg.currentGroupId)));
         }
+        send(source, gray("  Campfires: " + (cfg.campfireCampsites ? "on" : "off") + " (/poi campfires)"));
         return 1;
     }
 
@@ -995,10 +1025,11 @@ public final class PoiCommand {
      * already on the async thread) and stores it in {@link PoiSession}.  Errors are
      * swallowed — this is always a best-effort background refresh.
      */
-    private static void refreshPoiList(PoiStorage storage, String worldId) {
+    public static void refreshPoiList(PoiStorage storage, String worldId) {
         try {
             List<ApiModels.WorldItem> items = storage.listItems(worldId);
             PoiSession.get().setLastPoiList(flattenPois(items));
+            CampsiteIndex.rebuild(worldId, items);
         } catch (Exception ignored) {}
     }
 
