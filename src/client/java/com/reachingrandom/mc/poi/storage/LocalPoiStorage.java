@@ -117,6 +117,47 @@ public class LocalPoiStorage implements PoiStorage {
     }
 
     @Override
+    public ApiModels.WorldItem updatePoi(String worldId, String poiId,
+                                          String name, String description) throws ApiClient.ApiException {
+        ApiModels.AppState state = loadAppState();
+        ApiModels.WorldDetail world = requireWorld(state, worldId);
+
+        ApiModels.WorldItem poi = null;
+        ApiModels.WorldItem parent = null;
+        if (world.items != null) {
+            for (ApiModels.WorldItem item : world.items) {
+                if ("poi".equals(item.type) && poiId.equals(item.id)) {
+                    poi = item;
+                    break;
+                }
+                if ("group".equals(item.type) && item.items != null) {
+                    for (ApiModels.WorldItem child : item.items) {
+                        if (poiId.equals(child.id)) {
+                            poi = child;
+                            parent = item;
+                            break;
+                        }
+                    }
+                    if (poi != null) break;
+                }
+            }
+        }
+
+        if (poi == null) {
+            throw new ApiClient.ApiException("POI not found: " + poiId);
+        }
+
+        String ts = now();
+        if (name != null)        poi.name = name;
+        if (description != null) poi.description = description;
+        poi.modified = ts;
+        if (parent != null) parent.modified = ts;
+        world.modified = ts;
+        saveAppState(state);
+        return poi;
+    }
+
+    @Override
     public ApiModels.WorldItem createGroup(String worldId, String name) throws ApiClient.ApiException {
         ApiModels.AppState state = loadAppState();
         ApiModels.WorldDetail world = requireWorld(state, worldId);

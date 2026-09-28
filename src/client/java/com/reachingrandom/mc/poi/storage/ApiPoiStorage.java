@@ -50,6 +50,12 @@ public class ApiPoiStorage implements PoiStorage {
     }
 
     @Override
+    public ApiModels.WorldItem updatePoi(String worldId, String poiId,
+                                          String name, String description) throws ApiClient.ApiException {
+        return apiClient.updatePoi(worldId, poiId, name, description).poi;
+    }
+
+    @Override
     public ApiModels.WorldItem createGroup(String worldId, String name) throws ApiClient.ApiException {
         return apiClient.createGroup(worldId, name).group;
     }
