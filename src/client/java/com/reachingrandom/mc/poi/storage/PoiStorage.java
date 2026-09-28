@@ -38,6 +38,14 @@ public interface PoiStorage {
                                    double x, double y, double z,
                                    String dimension) throws ApiClient.ApiException;
 
+    /**
+     * Renames a POI and optionally replaces its description, keeping its ID.
+     * A {@code null} description leaves the existing one unchanged.
+     * Throws {@link ApiClient.ApiException} if the POI or world is not found.
+     */
+    ApiModels.WorldItem updatePoi(String worldId, String poiId,
+                                   String name, String description) throws ApiClient.ApiException;
+
     ApiModels.WorldItem createGroup(String worldId, String name) throws ApiClient.ApiException;
 
     /**
