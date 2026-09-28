@@ -1,5 +1,6 @@
 package com.reachingrandom.mc.poi;
 
+import com.reachingrandom.mc.poi.campsite.CampsiteTracker;
 import com.reachingrandom.mc.poi.command.PoiCommand;
 import com.reachingrandom.mc.poi.config.PoiConfig;
 import com.reachingrandom.mc.poi.render.PoiDirectionRenderer;
@@ -17,6 +18,9 @@ public class PointsofinterestClient implements ClientModInitializer {
 
 		// World-space direction indicator for tracked POIs
 		LevelRenderEvents.BEFORE_GIZMOS.register(PoiDirectionRenderer::render);
+
+		// Name campfires to save them as POIs in the "Campsites" group
+		CampsiteTracker.register();
 
 		// Auto-refresh the POI list whenever the player joins a world so that
 		// /poi track <#> works immediately without a manual /pois call first.
