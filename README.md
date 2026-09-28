@@ -17,6 +17,7 @@
 - **Seed Detection** — Automatically identifies singleplayer worlds by their seed for seamless selection.
 - **Dimension Support** — Tracks whether a POI is in the Overworld, Nether, or The End.
 - **Multi-POI Tracking** — Track multiple POIs simultaneously, each with its own 3D direction indicator.
+- **Campsites** — Name a campfire when you place it (or right-click it with an empty hand) and it becomes a POI in the "Campsites" group. Breaking the campfire removes the POI.
 - **Find** — `/poi find <text>` lists every POI whose name or description contains the text, nearest first, with the closest one marked.
 - **Schema-validated storage** — Local data files are validated against a versioned JSON schema on load to catch corruption early.
 
@@ -138,12 +139,27 @@ The downloaded file is tied to your API key via a hash — you can switch betwee
 | `/poi track <#> [# ...]` | Start tracking one or more POIs |
 | `/poi untrack <#> [# ...]` | Stop tracking one or more POIs |
 | `/poi track clear` | Stop tracking all POIs |
+| `/poi campfires [on\|off]` | Turn campfire campsites on or off (on by default) |
 | `/poi help` | Show command help (includes current storage mode) |
 | `/pois [page]` | Alias for `/poi list` |
 | `/pois all [page]` | Alias for `/poi list all` |
 | `/track <#> [...]` | Alias for `/poi track` |
 | `/untrack <#> [...]` | Alias for `/poi untrack` |
 | `/find <text>` | Alias for `/poi find` |
+
+---
+
+## Campsites
+
+Campfires can be saved as POIs, named much like a sign:
+
+- **Place** a campfire and a name prompt opens. Enter a name to save it as a POI in the **Campsites** group (created automatically). Leave it blank, or press Esc, and nothing is saved.
+- **Right-click** any campfire with an empty main hand to name or rename it. This also works on campfires placed before you installed the mod. Clearing the name removes the campsite.
+- **Break** the campfire and its POI is deleted and untracked.
+
+A campsite is linked to its campfire by position: any POI in the Campsites group at the campfire's exact block coordinates (same dimension) belongs to it. Everything runs on your client, so it works on any server, and campsites land in *your* POI list only.
+
+A POI is only removed automatically if the mod saw the campfire earlier in the same session and then saw it disappear. If a campfire is broken while you're logged out, delete its POI with `/poi delete`. Turn the feature off with `/poi campfires off`.
 
 ---
 
