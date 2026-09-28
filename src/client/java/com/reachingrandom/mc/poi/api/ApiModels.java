@@ -130,6 +130,22 @@ public final class ApiModels {
         public WorldItem poi;
     }
 
+    // ── /api/mc/poi/worlds/:worldId/pois/:poiId (PATCH) ───────────────────────
+    /** Null fields are omitted by Gson, so the server leaves them unchanged. */
+    public static class UpdatePoiRequest {
+        public String name;
+        public String description;
+
+        public UpdatePoiRequest(String name, String description) {
+            this.name = name;
+            this.description = description;
+        }
+    }
+
+    public static class UpdatePoiResponse {
+        public WorldItem poi;
+    }
+
     // ── /api/mc/poi/worlds/:worldId/groups (POST) ─────────────────────────────
     public static class CreateGroupRequest {
         public String name;

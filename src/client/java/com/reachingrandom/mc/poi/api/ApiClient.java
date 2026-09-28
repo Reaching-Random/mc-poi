@@ -91,6 +91,13 @@ public class ApiClient {
         return GSON.fromJson(json, ApiModels.CreateGroupResponse.class);
     }
 
+    public ApiModels.UpdatePoiResponse updatePoi(String worldId, String poiId,
+                                                  String name, String description) throws ApiException {
+        String body = GSON.toJson(new ApiModels.UpdatePoiRequest(name, description));
+        String json = patch("/api/mc/poi/worlds/" + worldId + "/pois/" + poiId, body);
+        return GSON.fromJson(json, ApiModels.UpdatePoiResponse.class);
+    }
+
     public void deletePoi(String worldId, String poiId) throws ApiException {
         delete("/api/mc/poi/worlds/" + worldId + "/pois/" + poiId);
     }
@@ -129,6 +136,19 @@ public class ApiClient {
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .timeout(Duration.ofSeconds(15))
+                .build();
+        return send(req);
+    }
+
+    private String patch(String path, String jsonBody) throws ApiException {
+        PoiConfig cfg = PoiConfig.get();
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(cfg.getApiBaseUrl() + path))
+                .header("Authorization", "Bearer " + effectiveApiKey())
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .method("PATCH", HttpRequest.BodyPublishers.ofString(jsonBody))
                 .timeout(Duration.ofSeconds(15))
                 .build();
         return send(req);
