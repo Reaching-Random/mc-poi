@@ -19,6 +19,6 @@ public class Pointsofinterest implements ModInitializer {
 		// However, some things (like resources) may still be uninitialized.
 		// Proceed with mild caution.
 
-		LOGGER.info("[POI Tracker] Initialized. Use /poi help in-game.");
+		LOGGER.info("[Points of Interest] Initialized. Use /poi help in-game.");
 	}
 }

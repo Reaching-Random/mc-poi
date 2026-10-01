@@ -1,10 +1,10 @@
-# POI Tracker — Minecraft Fabric Mod
+# Points of Interest — Minecraft Fabric Mod
 
 [![Minecraft Version](https://img.shields.io/badge/Minecraft-26.1-blue.svg)](https://www.minecraft.net/)
 [![Fabric API](https://img.shields.io/badge/Fabric-0.18.5-green.svg)](https://fabricmc.net/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**POI Tracker** is a Minecraft mod built with the Fabric API that lets you save, organize, and navigate to Points of Interest (POIs) directly in-game. It works **completely offline** out of the box and can optionally sync with your [Reaching Random](https://reachingrandom.com/mc/poi) account.
+**Points of Interest** is a Minecraft mod built with the Fabric API that lets you save, organize, and navigate to Points of Interest (POIs) directly in-game. It works **completely offline** out of the box and can optionally sync with your [Reaching Random](https://reachingrandom.com/mc/poi) account.
 
 ---
 
