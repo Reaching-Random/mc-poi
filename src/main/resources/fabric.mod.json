@@ -2,8 +2,8 @@
 	"schemaVersion": 1,
 	"id": "points-of-interest",
 	"version": "${version}",
-	"name": "POI Tracker",
-	"description": "Track Points of Interest across your Minecraft worlds, synced with reachingrandom.com.",
+	"name": "Points of Interest",
+	"description": "Tired of scribbling coordinates on scraps of paper? Points of Interest lets you save, manage, and track locations in every dimension, so you can always find your way back across the vastness of Minecraft.",
 	"authors": [
 		"Reaching Random LLC"
 	],
