@@ -264,7 +264,7 @@ public final class PoiCommand {
     // ── Help ──────────────────────────────────────────────────────────────────
 
     private static int executeWorldHelp(FabricClientCommandSource source) {
-        send(source, header("POI Tracker — World Management"));
+        send(source, header("Points of Interest — World Management"));
         send(source, gray("  /world list [page]    ") + "List your worlds");
         send(source, gray("  /world add [name]      ") + "Create a new world entry");
         send(source, gray("  /world select [number]") + "Select world (auto-selects by seed if no #)");
@@ -280,11 +280,11 @@ public final class PoiCommand {
         String modeTag = cfg.isOnlineMode() ? " §a[ONLINE]§r"
                        : cfg.isOffMode()    ? " §8[OFF]§r"
                        :                     " §e[OFFLINE]§r";
-        send(source, header("POI Tracker — POI Management") + modeTag);
+        send(source, header("Points of Interest — POI Management") + modeTag);
         send(source, gray("  /poi status               ") + "Show storage mode and configuration");
         send(source, gray("  /poi offline              ") + "Switch to offline storage");
         send(source, gray("  /poi online               ") + "Switch to online storage (requires API key)");
-        send(source, gray("  /poi off                  ") + "Disable POI Tracker (hides arrows, blocks commands)");
+        send(source, gray("  /poi off                  ") + "Disable Points of Interest (hides arrows, blocks commands)");
         send(source, gray("  /poi setkey <key>         ") + "Save API key and switch to online mode");
         send(source, gray("  /poi reset                ") + "Remove API key and return to offline mode");
         send(source, gray("  /poi download <key>       ") + "Download cloud data to local file");
@@ -314,7 +314,7 @@ public final class PoiCommand {
     }
 
     private static int executeGroupHelp(FabricClientCommandSource source) {
-        send(source, header("POI Tracker — Group Management"));
+        send(source, header("Points of Interest — Group Management"));
         send(source, gray("  /group list [page]    ") + "List groups in current world");
         send(source, gray("  /group add <name>      ") + "Create a new group");
         send(source, gray("  /group select <#>     ") + "Select target group for new POIs");
@@ -329,12 +329,12 @@ public final class PoiCommand {
     private static int executeOff(FabricClientCommandSource source) {
         PoiConfig cfg = PoiConfig.get();
         if (cfg.isOffMode()) {
-            send(source, gray("POI Tracker is already disabled. Run /poi offline or /poi online to re-enable."));
+            send(source, gray("Points of Interest is already disabled. Run /poi offline or /poi online to re-enable."));
             return 1;
         }
         cfg.storageMode = "off";
         cfg.save();
-        send(source, ok("POI Tracker disabled."));
+        send(source, ok("Points of Interest disabled."));
         send(source, gray("  Direction arrows are hidden. Run /poi offline or /poi online to re-enable."));
         return 1;
     }
@@ -362,7 +362,7 @@ public final class PoiCommand {
 
     private static int executeStatus(FabricClientCommandSource source) {
         PoiConfig cfg = PoiConfig.get();
-        send(source, header("POI Tracker — Status"));
+        send(source, header("Points of Interest — Status"));
         if (cfg.isOffMode()) {
             send(source, "  Mode:    §8OFF§r §7(run /poi offline or /poi online to re-enable)§r");
         } else if (cfg.isOnlineMode()) {
@@ -1375,7 +1375,7 @@ public final class PoiCommand {
     private static boolean checkReady(FabricClientCommandSource source) {
         PoiConfig cfg = PoiConfig.get();
         if (cfg.isOffMode()) {
-            send(source, err("POI Tracker is disabled."));
+            send(source, err("Points of Interest is disabled."));
             send(source, gray("  Run /poi offline to use local storage, or /poi online for cloud sync."));
             return false;
         }
