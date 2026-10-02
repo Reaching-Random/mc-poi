@@ -14,7 +14,7 @@
 - **Cloud sync** — Connect your Reaching Random account to sync POIs across devices and view them on the website.
 - **Download snapshot** — Fetch your cloud data to a local file with `/poi download` for offline access or backup.
 - **Multi-World & Groups** — Organize POIs by world and nested groups (categories).
-- **Seed Detection** — Automatically identifies singleplayer worlds by their seed for seamless selection.
+- **Per-World Selection** — Each singleplayer world and each server remembers its own POI world, tracked POIs and group. Singleplayer worlds are matched by seed automatically; on a server (where the seed is hidden) you pick the world once and it sticks.
 - **Dimension Support** — Tracks whether a POI is in the Overworld, Nether, or The End.
 - **Multi-POI Tracking** — Track multiple POIs simultaneously, each with its own 3D direction indicator.
 - **Campsites** — Name a campfire when you place it (or right-click it with an empty hand) and it becomes a POI in the "Campsites" group. Breaking the campfire removes the POI.
@@ -112,8 +112,8 @@ The downloaded file is tied to your API key via a hash — you can switch betwee
 |---------|-------------|
 | `/world list [page]` | List your saved worlds |
 | `/world add [name]` | Create a new world entry (auto-fills name and seed) |
-| `/world select [#]` | Select a world (auto-selects by seed if no number given) |
-| `/world clear` | Deselect the current world |
+| `/world select [#]` | Select a world for the Minecraft world or server you are in (with no number: the remembered world, or the one matching the seed) |
+| `/world clear` | Deselect the current world and forget it for this Minecraft world or server |
 | `/worlds [page]` | Alias for `/world list` |
 
 ### Group Management

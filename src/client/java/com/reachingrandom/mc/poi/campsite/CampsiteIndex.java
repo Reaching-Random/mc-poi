@@ -44,6 +44,11 @@ public final class CampsiteIndex {
         snapshot = new Snapshot(worldId, Map.copyOf(pois));
     }
 
+    /** Empties the index (no POI world selected). */
+    public static void clear() {
+        snapshot = new Snapshot(null, Map.of());
+    }
+
     /** Whether the index was last built for the given world. */
     public static boolean isBuiltFor(String worldId) {
         return worldId != null && worldId.equals(snapshot.worldId());

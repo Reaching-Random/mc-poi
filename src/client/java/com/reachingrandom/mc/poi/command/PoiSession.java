@@ -2,9 +2,9 @@ package com.reachingrandom.mc.poi.command;
 
 import com.reachingrandom.mc.poi.api.ApiModels;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Transient in-memory state for the current play session.
@@ -23,7 +23,7 @@ public final class PoiSession {
     }
 
     // ── Worlds list (from last /poi worlds) ────────────────────────────────────
-    private List<ApiModels.WorldSummary> lastWorldsList = Collections.emptyList();
+    private volatile List<ApiModels.WorldSummary> lastWorldsList = Collections.emptyList();
 
     public void setLastWorldsList(List<ApiModels.WorldSummary> worlds) {
         this.lastWorldsList = List.copyOf(worlds);
@@ -42,7 +42,7 @@ public final class PoiSession {
     }
 
     // ── Groups list (from last /poi groups) ────────────────────────────────────
-    private List<ApiModels.WorldItem> lastGroupsList = Collections.emptyList();
+    private volatile List<ApiModels.WorldItem> lastGroupsList = Collections.emptyList();
 
     public void setGroups(List<ApiModels.WorldItem> groups) {
         this.lastGroupsList = List.copyOf(groups);
@@ -61,7 +61,7 @@ public final class PoiSession {
     }
 
     // ── Flat POI list (from last /poi list) ────────────────────────────────────
-    private List<ApiModels.WorldItem> lastPoiList = Collections.emptyList();
+    private volatile List<ApiModels.WorldItem> lastPoiList = Collections.emptyList();
 
     public void setLastPoiList(List<ApiModels.WorldItem> pois) {
         this.lastPoiList = List.copyOf(pois);
@@ -97,7 +97,8 @@ public final class PoiSession {
     }
 
     // ── Tracked POIs (multi-track) ─────────────────────────────────────────────
-    private final List<ApiModels.WorldItem> trackedPois = new ArrayList<>();
+    // Read every frame by the renderer and changed from storage threads.
+    private final List<ApiModels.WorldItem> trackedPois = new CopyOnWriteArrayList<>();
 
     /**
      * Adds a POI to the tracked set. If a POI with the same ID is already
@@ -143,6 +144,16 @@ public final class PoiSession {
     }
 
     public void clearTrackedPois() {
+        trackedPois.clear();
+    }
+
+    /**
+     * Forgets everything that belongs to the selected POI world: the group and
+     * POI lists and the tracked POIs. The worlds list is not world-specific and stays.
+     */
+    public void clearWorldState() {
+        lastGroupsList = Collections.emptyList();
+        lastPoiList = Collections.emptyList();
         trackedPois.clear();
     }
 
