@@ -12,7 +12,7 @@
 
 - **🌐 Cloud Sync**: Your POIs are saved to your Reaching Random account, allowing you to view and share them from anywhere.
 - **📁 Multi-World & Groups**: Organize your POIs by world entry and nested groups (categories).
-- **🌱 Seed Detection**: Automatically identifies singleplayer worlds by their seed for seamless selection.
+- **🌱 Per-World Selection**: Each singleplayer world and each server remembers its own POI world, tracked POIs and group. Singleplayer worlds are matched by seed automatically; on a server (where the seed is hidden) you pick the world once and it sticks.
 - **🌌 Dimension Support**: Tracks whether a POI is in the Overworld, Nether, or The End.
 - **📍 Multi-POI Tracking**: Track multiple POIs simultaneously, each with its own 3D direction indicator.
 - **🔎 Find**: `/poi find <text>` lists every POI whose name or description contains the text, nearest first, with the closest one marked.
@@ -48,8 +48,9 @@ Before you can sync POIs, you need an API key:
 ### World Management
 - `/world list [page]`: Show your saved worlds (paginated).
 - `/world add [name]`: Create a new world record.
-- `/world select <#>`: Select a world from the list.
-- `/world select`: Auto-select based on the current world seed.
+- `/world select <#>`: Select a world from the list for the Minecraft world or server you are in.
+- `/world select`: Auto-select the remembered world, or the one matching the current world seed.
+- `/world clear`: Deselect the current world and forget it for this Minecraft world or server.
 - `/world help`: Show all world management commands.
 
 ### Group Management

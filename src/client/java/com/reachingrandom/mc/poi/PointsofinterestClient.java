@@ -2,7 +2,6 @@ package com.reachingrandom.mc.poi;
 
 import com.reachingrandom.mc.poi.campsite.CampsiteTracker;
 import com.reachingrandom.mc.poi.command.PoiCommand;
-import com.reachingrandom.mc.poi.config.PoiConfig;
 import com.reachingrandom.mc.poi.render.PoiDirectionRenderer;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -22,15 +21,11 @@ public class PointsofinterestClient implements ClientModInitializer {
 		// Name campfires to save them as POIs in the "Campsites" group
 		CampsiteTracker.register();
 
-		// Auto-refresh the POI list whenever the player joins a world so that
-		// /poi track <#> works immediately without a manual /pois call first.
-		// Works in both online and offline storage modes — no API key required
-		// for offline mode.
-		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
-			PoiConfig cfg = PoiConfig.get();
-			if (cfg.currentWorldId != null) {
-				PoiCommand.refreshAndRestoreTrackedAsync(cfg.currentWorldId);
-			}
-		});
+		// Each Minecraft world or server has its own POI world. Select it on join
+		// (which also refreshes the POI list and restores tracked POIs, so
+		// /poi track <#> works without a manual /pois call first), and drop
+		// everything on disconnect so nothing carries over into the next world.
+		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> PoiCommand.onJoin());
+		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> PoiCommand.onDisconnect());
 	}
 }
