@@ -13,10 +13,12 @@ import com.reachingrandom.mc.poi.storage.PoiStorageProvider;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.LevelResource;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -27,6 +29,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 import static com.mojang.brigadier.arguments.IntegerArgumentType.getInteger;
 import static com.mojang.brigadier.arguments.StringArgumentType.getString;
@@ -267,7 +271,7 @@ public final class PoiCommand {
         send(source, header("Points of Interest — World Management"));
         send(source, gray("  /world list [page]    ") + "List your worlds");
         send(source, gray("  /world add [name]      ") + "Create a new world entry");
-        send(source, gray("  /world select [number]") + "Select world (auto-selects by seed if no #)");
+        send(source, gray("  /world select [number]") + "Select world for this save/server (auto-selects if no #)");
         send(source, gray("  /world clear          ") + "Clear currently selected world");
         send(source, "");
         send(source, gray("Run ") + "/poi help" + gray(" for POI and category commands."));
@@ -392,11 +396,6 @@ public final class PoiCommand {
     private static int executeOffline(FabricClientCommandSource source) {
         PoiConfig cfg = PoiConfig.get();
         cfg.storageMode    = "offline";
-        // World IDs are backend-specific — clear the online ID so commands
-        // don't try to look up an API world ID in the local file.
-        cfg.currentWorldId   = null;
-        cfg.currentGroupId   = null;
-        cfg.currentGroupName = null;
         cfg.save();
 
         Path dataFile = PoiStorageProvider.resolveDataFile(cfg);
@@ -404,13 +403,8 @@ public final class PoiCommand {
                 .append(fileLink(dataFile));
         sendComponent(source, msg);
 
-        // Attempt seed-based auto-selection from the offline file
-        String currentSeed = getCurrentSeed();
-        if (currentSeed != null) {
-            async(source, () -> autoSelectWorldBySeed(source, PoiStorageProvider.get(), currentSeed));
-        } else {
-            send(source, gray("  Run /world list to select your world."));
-        }
+        // World IDs are backend-specific — re-establish the world from the offline file
+        reselectWorld(m -> send(source, m), "  ", false);
         return 1;
     }
 
@@ -423,20 +417,11 @@ public final class PoiCommand {
             return 0;
         }
         cfg.storageMode    = "online";
-        // Clear the offline world ID — it won't be valid against the API.
-        cfg.currentWorldId   = null;
-        cfg.currentGroupId   = null;
-        cfg.currentGroupName = null;
         cfg.save();
         send(source, ok("Switched to ONLINE mode."));
 
-        // Attempt seed-based auto-selection from the API
-        String currentSeed = getCurrentSeed();
-        if (currentSeed != null) {
-            async(source, () -> autoSelectWorldBySeed(source, PoiStorageProvider.get(), currentSeed));
-        } else {
-            send(source, gray("  Run /world list to select your world."));
-        }
+        // World IDs are backend-specific — re-establish the world from the API
+        reselectWorld(m -> send(source, m), "  ", false);
         return 1;
     }
 
@@ -446,10 +431,6 @@ public final class PoiCommand {
         PoiConfig cfg = PoiConfig.get();
         cfg.apiKey         = key.trim();
         cfg.storageMode    = "online";
-        // Clear offline world ID — it won't be valid against the API.
-        cfg.currentWorldId   = null;
-        cfg.currentGroupId   = null;
-        cfg.currentGroupName = null;
         cfg.save();
         send(source, ok("API key saved. Switched to ONLINE mode."));
 
@@ -460,14 +441,8 @@ public final class PoiCommand {
         sendComponent(source, fileNote);
         send(source, gray("  Run /poi offline to switch back at any time."));
 
-        // Capture seed now — getCurrentSeed() touches the server and must run on the game thread
-        String currentSeed = getCurrentSeed();
-
-        if (currentSeed != null) {
-            async(source, () -> autoSelectWorldBySeed(source, PoiStorageProvider.get(), currentSeed));
-        } else {
-            send(source, gray("  Use /world list to select your world."));
-        }
+        // World IDs are backend-specific — re-establish the world from the API
+        reselectWorld(m -> send(source, m), "  ", false);
         return 1;
     }
 
@@ -559,6 +534,7 @@ public final class PoiCommand {
         if (!checkReady(source)) return 0;
 
         String currentSeed = getCurrentSeed();
+        String place = getPlaceKey();
         async(source, () -> {
             PoiStorage storage = PoiStorageProvider.get();
             List<ApiModels.WorldSummary> worlds = storage.listWorlds();
@@ -586,8 +562,8 @@ public final class PoiCommand {
                     ApiModels.WorldSummary match = seedMatches.get(0);
                     PoiConfig cfg = PoiConfig.get();
                     if (cfg.currentWorldId == null) {
-                        cfg.currentWorldId = match.id;
-                        cfg.save();
+                        cfg.bindWorld(place, match.id);
+                        switchWorld(match.id);
                     }
                 }
                 send(source, header("Worlds"));
@@ -629,14 +605,14 @@ public final class PoiCommand {
         String defaultName = getWorldName();
         String finalName = (name == null || name.isBlank()) ? defaultName : stripQuotes(name);
         String seed = getCurrentSeed() != null ? getCurrentSeed() : "";
+        String place = getPlaceKey();
 
         async(source, () -> {
             PoiStorage storage = PoiStorageProvider.get();
             ApiModels.WorldSummary world = storage.createWorld(finalName, seed);
 
-            PoiConfig cfg = PoiConfig.get();
-            cfg.currentWorldId = world.id;
-            cfg.save();
+            PoiConfig.get().bindWorld(place, world.id);
+            switchWorld(world.id);
 
             send(source, ok("World \"" + world.name + "\" created and selected."));
             if (!seed.isBlank()) {
@@ -646,40 +622,96 @@ public final class PoiCommand {
         return 1;
     }
 
-    // ── World auto-selection helper ────────────────────────────────────────────
+    // ── World selection ────────────────────────────────────────────────────────
+
+    /** Bumped on every world switch, so a resolve that started earlier can't override a newer selection. */
+    private static final AtomicInteger worldEpoch = new AtomicInteger();
+
+    /** Selects the POI world that belongs to the Minecraft world or server just joined. */
+    public static void onJoin() {
+        if (PoiConfig.get().isOffMode()) return;
+        reselectWorld(PoiCommand::chat, "[POI] ", true);
+    }
+
+    /** Leaves no world selected, so nothing carries over into the next world joined. */
+    public static void onDisconnect() {
+        switchWorld(null);
+    }
 
     /**
-     * Tries to find exactly one world in {@code storage} whose seed matches
-     * {@code currentSeed} and, if successful, writes it to config and triggers
-     * a background POI refresh.  Must be called from an async context (not the
-     * game thread) since it performs storage I/O.
+     * Makes {@code worldId} the selected POI world ({@code null} = none): drops the
+     * previous world's lists, tracked POIs and campsites, then loads the new world's.
      */
-    private static void autoSelectWorldBySeed(FabricClientCommandSource source,
-                                               PoiStorage storage,
-                                               String currentSeed) {
-        try {
-            List<ApiModels.WorldSummary> worlds = storage.listWorlds();
-            List<ApiModels.WorldSummary> matches = worlds.stream()
-                    .filter(w -> currentSeed.equals(w.seed))
-                    .toList();
+    private static void switchWorld(String worldId) {
+        worldEpoch.incrementAndGet();
+        PoiConfig.get().activateWorld(worldId);
+        PoiSession.get().clearWorldState();
+        CampsiteIndex.clear();
+        refreshAndRestoreTrackedAsync(worldId);
+    }
 
-            if (matches.size() == 1) {
-                ApiModels.WorldSummary match = matches.get(0);
-                PoiConfig cfg = PoiConfig.get();
-                cfg.currentWorldId = match.id;
-                cfg.save();
-                send(source, ok("  World auto-selected: " + match.name));
-                refreshPoiList(storage, match.id);
-            } else if (matches.size() > 1) {
-                send(source, gray("  Multiple worlds match this seed — run /world list to pick one."));
-            } else if (!worlds.isEmpty()) {
-                send(source, gray("  No worlds match the current seed — run /world list to select one."));
-            } else {
-                send(source, gray("  No worlds found — run /world add to create one."));
+    /**
+     * Deselects the current world, then selects the one for the place the player is in:
+     * the world bound to this place if the active storage has it, otherwise the single
+     * world whose seed matches (which is then bound), otherwise none.
+     * Must be called on the game thread; the lookup itself runs in the background.
+     *
+     * @param out    receives chat feedback lines
+     * @param prefix put in front of every feedback line
+     * @param onJoin true for the automatic run on join, which stays silent unless
+     *               there is something for the player to do or know
+     */
+    private static void reselectWorld(Consumer<String> out, String prefix, boolean onJoin) {
+        PoiConfig cfg = PoiConfig.get();
+        String legacyId = cfg.takeLegacyWorldId();
+        String place = getPlaceKey();
+        String seed  = getCurrentSeed();
+
+        switchWorld(null);
+        if (cfg.isOffMode() || (cfg.isOnlineMode() && !cfg.hasApiKey())) return;
+
+        int epoch = worldEpoch.get();
+        CompletableFuture.runAsync(() -> {
+            List<ApiModels.WorldSummary> worlds;
+            try {
+                worlds = PoiStorageProvider.get().listWorlds();
+            } catch (Exception e) {
+                out.accept(gray(prefix + "(Could not load worlds: " + e.getMessage() + ")"));
+                return;
             }
-        } catch (Exception e) {
-            send(source, gray("  (Could not load worlds: " + e.getMessage() + ")"));
-        }
+            if (worldEpoch.get() != epoch) return;
+
+            String boundId = cfg.getBinding(place);
+            ApiModels.WorldSummary bound = boundId == null ? null : worlds.stream()
+                    .filter(w -> boundId.equals(w.id))
+                    .findFirst().orElse(null);
+            if (bound != null) {
+                switchWorld(bound.id);
+                if (!onJoin) out.accept(ok(prefix + "World selected: " + bound.name));
+                return;
+            }
+
+            List<ApiModels.WorldSummary> matches = seed == null ? List.of() : worlds.stream()
+                    .filter(w -> seed.equals(w.seed))
+                    .toList();
+            ApiModels.WorldSummary match = matches.size() == 1 ? matches.get(0)
+                    // Selection from before bindings existed: the seed confirms it is this world
+                    : matches.stream().filter(w -> w.id.equals(legacyId)).findFirst().orElse(null);
+
+            if (match != null) {
+                cfg.bindWorld(place, match.id);
+                switchWorld(match.id);
+                out.accept(ok(prefix + "World auto-selected: " + match.name));
+            } else if (matches.size() > 1) {
+                out.accept(gray(prefix + "Multiple worlds match this seed — run /world list to pick one."));
+            } else if (worlds.isEmpty()) {
+                if (!onJoin) out.accept(gray(prefix + "No worlds found — run /world add to create one."));
+            } else if (seed != null) {
+                out.accept(gray(prefix + "No worlds match the current seed — run /world list to select one."));
+            } else {
+                out.accept(gray(prefix + "No world selected for this server — run /world list to select one."));
+            }
+        });
     }
 
     // ── /world select ──────────────────────────────────────────────────────────
@@ -696,31 +728,28 @@ public final class PoiCommand {
             return 0;
         }
 
-        PoiConfig cfg = PoiConfig.get();
-        cfg.currentWorldId = world.id;
-        cfg.save();
+        PoiConfig.get().bindWorld(getPlaceKey(), world.id);
+        switchWorld(world.id);
 
         send(source, ok("Selected: " + world.name));
+        String currentSeed = getCurrentSeed();
+        if (currentSeed != null && world.seed != null && !world.seed.isBlank()
+                && !currentSeed.equals(world.seed)) {
+            send(source, gray("  Note: this world was saved with a different seed than the one you are in."));
+        }
         return 1;
     }
 
     private static int executeAutoSelect(FabricClientCommandSource source) {
         if (!checkReady(source)) return 0;
 
-        String currentSeed = getCurrentSeed();
-        if (currentSeed == null) {
-            send(source, err("Current world seed unknown (remote server?)."));
-            return 0;
-        }
-
-        async(source, () -> autoSelectWorldBySeed(source, PoiStorageProvider.get(), currentSeed));
+        reselectWorld(m -> send(source, m), "", false);
         return 1;
     }
 
     private static int executeClear(FabricClientCommandSource source) {
-        PoiConfig cfg = PoiConfig.get();
-        cfg.currentWorldId = null;
-        cfg.save();
+        PoiConfig.get().bindWorld(getPlaceKey(), null);
+        switchWorld(null);
         send(source, ok("World selection cleared."));
         return 1;
     }
@@ -748,9 +777,6 @@ public final class PoiCommand {
         boolean wasOnline = cfg.isOnlineMode();
         cfg.apiKey         = "";
         cfg.storageMode    = "offline";
-        cfg.currentWorldId   = null;  // online IDs are not valid in the local file
-        cfg.currentGroupId   = null;
-        cfg.currentGroupName = null;
         cfg.save();
 
         if (wasOnline) {
@@ -759,13 +785,8 @@ public final class PoiCommand {
             send(source, ok("Switched to OFFLINE mode."));
         }
 
-        // Re-establish world context from the offline file
-        String currentSeed = getCurrentSeed();
-        if (currentSeed != null) {
-            async(source, () -> autoSelectWorldBySeed(source, PoiStorageProvider.get(), currentSeed));
-        } else {
-            send(source, gray("  Run /world list to select your world."));
-        }
+        // Re-establish world context from the offline file (online IDs are not valid there)
+        reselectWorld(m -> send(source, m), "  ", false);
         return 1;
     }
 
@@ -1028,6 +1049,8 @@ public final class PoiCommand {
     public static void refreshPoiList(PoiStorage storage, String worldId) {
         try {
             List<ApiModels.WorldItem> items = storage.listItems(worldId);
+            // The selection may have changed while the list was loading
+            if (!worldId.equals(PoiConfig.get().currentWorldId)) return;
             PoiSession.get().setLastPoiList(flattenPois(items));
             CampsiteIndex.rebuild(worldId, items);
         } catch (Exception ignored) {}
@@ -1050,12 +1073,12 @@ public final class PoiCommand {
         if (PoiConfig.get().isOffMode()) return;
         CompletableFuture.runAsync(() -> {
             refreshPoiList(PoiStorageProvider.get(), worldId);
-            restoreTrackedPois();
+            if (worldId.equals(PoiConfig.get().currentWorldId)) restoreTrackedPois();
         });
     }
 
     private static void restoreTrackedPois() {
-        List<String> savedIds = PoiConfig.get().getTrackedPoiIds();
+        List<String> savedIds = List.copyOf(PoiConfig.get().getTrackedPoiIds());
         if (savedIds.isEmpty()) return;
         List<ApiModels.WorldItem> allPois = PoiSession.get().getLastPoiList();
         for (String id : savedIds) {
@@ -1427,6 +1450,28 @@ public final class PoiCommand {
         return null;
     }
 
+    /**
+     * Identifies the Minecraft world or server the player is in, as the key under
+     * which its POI world is remembered. Returns null when there is nothing stable
+     * to key on.
+     */
+    private static String getPlaceKey() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.hasSingleplayerServer() && mc.getSingleplayerServer() != null) {
+            // The seed is part of the key so that a new world created under a
+            // deleted world's folder name doesn't inherit its POIs.
+            Path root = mc.getSingleplayerServer().getWorldPath(LevelResource.ROOT)
+                    .toAbsolutePath().normalize();
+            return "sp:" + root.getFileName() + ":" + getCurrentSeed();
+        }
+        ServerData server = mc.getCurrentServer();
+        if (server == null) return null;
+        // Realms and LAN addresses change between sessions; their names don't
+        if (server.isRealm()) return "realm:" + server.name;
+        if (server.isLan())   return "lan:" + server.name;
+        return server.ip != null ? "mp:" + server.ip.toLowerCase(Locale.ROOT) : null;
+    }
+
     private static String getWorldName() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.hasSingleplayerServer() && mc.getSingleplayerServer() != null) {
@@ -1608,6 +1653,14 @@ public final class PoiCommand {
     private static String ok(String text)   { return "§a" + text + "§r"; }
     private static String err(String text)  { return "§c" + text + "§r"; }
     private static String gray(String text) { return "§7" + text + "§r"; }
+
+    /** Chat message outside of a command (no command source available). */
+    private static void chat(String legacyText) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            if (mc.player != null) mc.player.sendSystemMessage(Component.literal(legacyText));
+        });
+    }
 
     private static void send(FabricClientCommandSource source, String legacyText) {
         Minecraft.getInstance().execute(() ->
