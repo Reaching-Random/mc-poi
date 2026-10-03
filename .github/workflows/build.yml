@@ -20,6 +20,7 @@ jobs:
       minecraft_version: '26.1'
       java_version: '25'
       create_release: ${{ inputs.build_type == 'Build & Release' }}
+      modrinth_version_type: beta
     permissions:
       contents: write
     secrets:
