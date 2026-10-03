@@ -11,6 +11,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Locale;
 
 /**
  * Thin wrapper around Java's HttpClient for the reaching-random POI API.
@@ -104,10 +105,29 @@ public class ApiClient {
 
     // ── HTTP helpers ───────────────────────────────────────────────────────────
 
+    /**
+     * Resolves an API path against the configured base URL. Refuses plain HTTP
+     * except to a local development host, so the API key is never sent in clear text.
+     */
+    private static URI uri(String path) throws ApiException {
+        URI uri = URI.create(PoiConfig.get().getApiBaseUrl() + path);
+        if (!"https".equalsIgnoreCase(uri.getScheme()) && !isLocalHost(uri.getHost())) {
+            throw new ApiException("Refusing to send the API key over insecure " + uri.getScheme()
+                    + " to " + uri.getHost() + " — the API URL must use https");
+        }
+        return uri;
+    }
+
+    private static boolean isLocalHost(String host) {
+        if (host == null) return false;
+        String h = host.toLowerCase(Locale.ROOT);
+        return h.equals("localhost") || h.endsWith(".localhost")
+                || h.equals("127.0.0.1") || h.equals("[::1]") || h.equals("::1");
+    }
+
     private void delete(String path) throws ApiException {
-        PoiConfig cfg = PoiConfig.get();
         HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(cfg.getApiBaseUrl() + path))
+                .uri(uri(path))
                 .header("Authorization", "Bearer " + effectiveApiKey())
                 .header("Accept", "application/json")
                 .DELETE()
@@ -117,9 +137,8 @@ public class ApiClient {
     }
 
     private String get(String path) throws ApiException {
-        PoiConfig cfg = PoiConfig.get();
         HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(cfg.getApiBaseUrl() + path))
+                .uri(uri(path))
                 .header("Authorization", "Bearer " + effectiveApiKey())
                 .header("Accept", "application/json")
                 .GET()
@@ -129,9 +148,8 @@ public class ApiClient {
     }
 
     private String post(String path, String jsonBody) throws ApiException {
-        PoiConfig cfg = PoiConfig.get();
         HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(cfg.getApiBaseUrl() + path))
+                .uri(uri(path))
                 .header("Authorization", "Bearer " + effectiveApiKey())
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
@@ -142,9 +160,8 @@ public class ApiClient {
     }
 
     private String patch(String path, String jsonBody) throws ApiException {
-        PoiConfig cfg = PoiConfig.get();
         HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(cfg.getApiBaseUrl() + path))
+                .uri(uri(path))
                 .header("Authorization", "Bearer " + effectiveApiKey())
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
