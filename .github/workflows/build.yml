@@ -22,4 +22,6 @@ jobs:
       create_release: ${{ inputs.build_type == 'Build & Release' }}
     permissions:
       contents: write
-    secrets: inherit
+    secrets:
+      gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+      modrinth_token: ${{ secrets.MODRINTH_TOKEN }}
