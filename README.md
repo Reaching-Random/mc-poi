@@ -222,8 +222,12 @@ The schema is validated on every file load. If the file fails validation, an err
 
 ## Development
 
+This repository contains the mod only. The Reaching Random website and the POI Tracker API that online mode syncs with are a separate, closed-source service. Offline mode needs neither.
+
+Contributions are welcome. See [CONTRIBUTING.md](https://github.com/Reaching-Random/mc-poi/blob/HEAD/CONTRIBUTING.md) for how the branches are organized, and [SECURITY.md](https://github.com/Reaching-Random/mc-poi/blob/HEAD/SECURITY.md) to report a vulnerability.
+
 ### Prerequisites
-- JDK 21+
+- JDK 25+
 - Gradle (provided via `./gradlew`)
 
 ### Build
