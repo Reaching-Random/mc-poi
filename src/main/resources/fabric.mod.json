@@ -8,7 +8,9 @@
 		"Reaching Random LLC"
 	],
 	"contact": {
-		"homepage": "https://reachingrandom.com/mc/poi/help"
+		"homepage": "https://reachingrandom.com/mc/poi/help",
+		"sources": "https://github.com/Reaching-Random/mc-poi",
+		"issues": "https://github.com/Reaching-Random/mc-poi/issues"
 	},
 	"license": "MIT",
 	"icon": "assets/points-of-interest/icon.png",
