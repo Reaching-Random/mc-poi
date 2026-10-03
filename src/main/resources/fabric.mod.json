@@ -21,13 +21,6 @@
 			"com.reachingrandom.mc.poi.PointsofinterestClient"
 		]
 	},
-	"mixins": [
-		"points-of-interest.mixins.json",
-		{
-			"config": "points-of-interest.client.mixins.json",
-			"environment": "client"
-		}
-	],
 	"depends": {
 		"fabricloader": ">=0.19.5",
 		"minecraft": "~26.3",
