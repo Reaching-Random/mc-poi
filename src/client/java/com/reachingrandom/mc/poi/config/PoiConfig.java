@@ -26,6 +26,7 @@ public class PoiConfig {
     private static final Path POI_DIR = CONFIG_DIR.resolve("poi");
 
     private static PoiConfig instance;
+    private static volatile boolean loggedApiOverride;
     private transient Path currentFilePath;
 
     // ── Serialized fields ──────────────────────────────────────────────────────
@@ -145,7 +146,10 @@ public class PoiConfig {
     public String getApiBaseUrl() {
         String override = System.getProperty("reaching.random.api.root");
         if (override != null && !override.isBlank()) {
-            LOGGER.info("[POI] Using API URL override: {}", override);
+            if (!loggedApiOverride) {
+                loggedApiOverride = true;
+                LOGGER.info("[POI] Using API URL override: {}", override);
+            }
             return override;
         }
         return apiBaseUrl != null ? apiBaseUrl : "https://reachingrandom.com";
