@@ -26,7 +26,7 @@
 1.  Ensure you have **Fabric Loader** installed for Minecraft **1.21.11**.
 2.  Download the latest `points-of-interest-*.jar` from the [Releases](https://github.com/Reaching-Random/mc-poi/releases) page.
 3.  Place the JAR file in your Minecraft `mods/` folder.
-4.  (Optional but Recommended) Install the **Fabric API** mod.
+4.  Install the **Fabric API** mod. It is required; the mod will not load without it.
 
 ---
 
