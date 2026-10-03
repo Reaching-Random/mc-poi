@@ -73,7 +73,7 @@ Files use the same JSON format as the Reaching Random website's import/export fe
 
 ## Quick Start (Online / Cloud Sync)
 
-1. Log in to [Reaching Random](https://reachingrandom.com) and copy your **POI Tracker API Key** from Settings.
+1. Log in to [Reaching Random](https://reachingrandom.com), open the [POI Tracker](https://reachingrandom.com/mc/poi), click **Connect mod** and copy your API key (it starts with `mcpoi_`).
 2. In Minecraft:
 ```mcfunction
 /poi setkey <your-api-key>    # Saves key and switches to online mode
