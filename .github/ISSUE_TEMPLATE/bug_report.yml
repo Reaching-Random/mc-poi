@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in the mod doesn't work as expected.
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. /poi add "My Base"
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: minecraft
+    attributes:
+      label: Minecraft version
+      placeholder: "26.3"
+    validations:
+      required: true
+  - type: input
+    id: mod
+    attributes:
+      label: Points of Interest version
+      description: The jar name, e.g. points-of-interest-0.3.2+26.3.jar
+    validations:
+      required: true
+  - type: input
+    id: fabric
+    attributes:
+      label: Fabric Loader and Fabric API versions
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Storage mode
+      description: Shown by /poi status
+      options:
+        - Offline
+        - Online
+        - Not sure
+  - type: textarea
+    id: mods
+    attributes:
+      label: Other mods installed
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log output
+      description: The relevant part of logs/latest.log (or a crash report). Remove your API key if it appears.
+      render: text

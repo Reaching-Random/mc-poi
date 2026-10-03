@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Points of Interest help
+    url: https://reachingrandom.com/mc/poi/help
+    about: Usage guide for the mod and the POI Tracker website.
+  - name: Report a security vulnerability
+    url: https://github.com/Reaching-Random/mc-poi/security/advisories/new
+    about: Please report security problems privately, not as a public issue.
