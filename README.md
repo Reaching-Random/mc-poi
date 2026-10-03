@@ -35,7 +35,7 @@
 Before you can sync POIs, you need an API key:
 
 1.  Log in to [Reaching Random](https://reachingrandom.com).
-2.  Go to your **Settings** and copy your **POI Tracker API Key**.
+2.  Open the [POI Tracker](https://reachingrandom.com/mc/poi), click **Connect mod** and copy your API key (it starts with `mcpoi_`).
 3.  In Minecraft, run:
     ```mcfunction
     /poi setkey <your-api-key>
