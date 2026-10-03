@@ -110,6 +110,10 @@ Commands that return lists support pagination (8 items per page). When a list sp
 
 ## 👩‍💻 Development
 
+This repository contains the mod only. The Reaching Random website and the POI Tracker API that online mode syncs with are a separate, closed-source service. Offline mode needs neither.
+
+Contributions are welcome. See [CONTRIBUTING.md](https://github.com/Reaching-Random/mc-poi/blob/HEAD/CONTRIBUTING.md) for how the branches are organized, and [SECURITY.md](https://github.com/Reaching-Random/mc-poi/blob/HEAD/SECURITY.md) to report a vulnerability.
+
 ### Prerequisites
 - JDK 21+
 - Gradle (provided via `./gradlew`)
