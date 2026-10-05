@@ -1,7 +1,9 @@
 package com.reachingrandom.mc.poi.api;
 
 import com.google.gson.Gson;
+import com.reachingrandom.mc.poi.Pointsofinterest;
 import com.reachingrandom.mc.poi.config.PoiConfig;
+import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,7 +12,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -30,6 +35,15 @@ public class ApiClient {
             .version(HttpClient.Version.HTTP_1_1) // Force HTTP 1.1 for dev server compatibility
             .connectTimeout(Duration.ofSeconds(10))
             .build();
+
+    /**
+     * Sent on every request as {@code points-of-interest/<version>}. The site uses it to tell
+     * builds that understand sharing from older ones, and to ask outdated builds to update.
+     */
+    private static final String CLIENT_HEADER = "points-of-interest/" + FabricLoader.getInstance()
+            .getModContainer(Pointsofinterest.MOD_ID)
+            .map(m -> m.getMetadata().getVersion().getFriendlyString())
+            .orElse("0.0.0");
 
     /** If non-null, used instead of the key stored in {@link PoiConfig}. */
     private final String apiKeyOverride;
@@ -103,6 +117,92 @@ public class ApiClient {
         delete("/api/mc/poi/worlds/" + worldId + "/pois/" + poiId);
     }
 
+    // ── Campsites ──────────────────────────────────────────────────────────────
+
+    public ApiModels.WorldItem createCampsite(String worldId, String name, String dimension,
+                                              int x, int y, int z) throws ApiException {
+        String body = GSON.toJson(new ApiModels.CreateCampsiteRequest(name, dimension, x, y, z));
+        return GSON.fromJson(post("/api/mc/poi/worlds/" + worldId + "/campsites", body), ApiModels.PoiResponse.class).poi;
+    }
+
+    /** Removes the campsite at a broken campfire. Succeeds if it's already gone. */
+    public void removeCampsiteAt(String worldId, String dimension, int x, int y, int z) throws ApiException {
+        delete("/api/mc/poi/worlds/" + worldId + "/campsites?dim=" + enc(dimension) + "&x=" + x + "&y=" + y + "&z=" + z);
+    }
+
+    public ApiModels.WorldItem renameCampsite(String worldId, String poiId, String name) throws ApiException {
+        String body = GSON.toJson(new ApiModels.RenameRequest(name));
+        return GSON.fromJson(patch("/api/mc/poi/worlds/" + worldId + "/campsites/" + poiId, body), ApiModels.PoiResponse.class).poi;
+    }
+
+    public void deleteCampsite(String worldId, String poiId) throws ApiException {
+        delete("/api/mc/poi/worlds/" + worldId + "/campsites/" + poiId);
+    }
+
+    // ── Sharing ────────────────────────────────────────────────────────────────
+
+    public long getRev(String worldId) throws ApiException {
+        return GSON.fromJson(get("/api/mc/poi/worlds/" + worldId + "/rev"), ApiModels.RevResponse.class).rev;
+    }
+
+    public void setServerAddress(String worldId, String serverAddress) throws ApiException {
+        patch("/api/mc/poi/worlds/" + worldId, GSON.toJson(new ApiModels.ServerAddressRequest(serverAddress)));
+    }
+
+    public List<ApiModels.Member> getMembers(String worldId) throws ApiException {
+        return GSON.fromJson(get("/api/mc/poi/worlds/" + worldId + "/members"), ApiModels.MembersResponse.class).members;
+    }
+
+    public void leaveWorld(String worldId) throws ApiException {
+        post("/api/mc/poi/worlds/" + worldId + "/leave", "{}");
+    }
+
+    public List<ApiModels.InviteResult> invitePlayers(String worldId, String role, List<ApiModels.Player> players) throws ApiException {
+        String body = GSON.toJson(new ApiModels.InvitePlayersRequest(role, players));
+        return GSON.fromJson(post("/api/mc/poi/worlds/" + worldId + "/invites", body), ApiModels.InvitePlayersResponse.class).results;
+    }
+
+    public List<ApiModels.Invite> getInvites(String worldId) throws ApiException {
+        return GSON.fromJson(get("/api/mc/poi/worlds/" + worldId + "/invites"), ApiModels.InvitesResponse.class).invites;
+    }
+
+    public void revokeInvite(String worldId, String inviteId) throws ApiException {
+        delete("/api/mc/poi/worlds/" + worldId + "/invites/" + inviteId);
+    }
+
+    public List<ApiModels.PendingInvite> getPendingInvites() throws ApiException {
+        return GSON.fromJson(get("/api/mc/poi/invites"), ApiModels.PendingInvitesResponse.class).invites;
+    }
+
+    /** Accepts or declines an invite sent to you; returns the world's id. */
+    public String respondToInvite(String inviteId, boolean accept) throws ApiException {
+        String json = post("/api/mc/poi/invites/" + inviteId + (accept ? "/accept" : "/decline"), "{}");
+        return accept ? GSON.fromJson(json, ApiModels.WorldIdResponse.class).worldId : null;
+    }
+
+    // ── Account linking ────────────────────────────────────────────────────────
+
+    public String createLinkNonce() throws ApiException {
+        return GSON.fromJson(post("/api/mc/poi/link/nonce", "{}"), ApiModels.NonceResponse.class).nonce;
+    }
+
+    public ApiModels.LinkedAccount link(String username, String nonce) throws ApiException {
+        String body = GSON.toJson(new ApiModels.LinkRequest(username, nonce));
+        return GSON.fromJson(post("/api/mc/poi/link", body), ApiModels.LinkResponse.class).account;
+    }
+
+    public List<ApiModels.LinkedAccount> getLinkedAccounts() throws ApiException {
+        return GSON.fromJson(get("/api/mc/poi/link"), ApiModels.LinkedAccountsResponse.class).accounts;
+    }
+
+    public void unlink(String uuid) throws ApiException {
+        delete("/api/mc/poi/link/" + uuid);
+    }
+
+    private static String enc(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
     // ── HTTP helpers ───────────────────────────────────────────────────────────
 
     /**
@@ -129,6 +229,7 @@ public class ApiClient {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(uri(path))
                 .header("Authorization", "Bearer " + effectiveApiKey())
+                .header("X-POI-Client", CLIENT_HEADER)
                 .header("Accept", "application/json")
                 .DELETE()
                 .timeout(Duration.ofSeconds(15))
@@ -140,6 +241,7 @@ public class ApiClient {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(uri(path))
                 .header("Authorization", "Bearer " + effectiveApiKey())
+                .header("X-POI-Client", CLIENT_HEADER)
                 .header("Accept", "application/json")
                 .GET()
                 .timeout(Duration.ofSeconds(15))
@@ -151,6 +253,7 @@ public class ApiClient {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(uri(path))
                 .header("Authorization", "Bearer " + effectiveApiKey())
+                .header("X-POI-Client", CLIENT_HEADER)
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
@@ -163,6 +266,7 @@ public class ApiClient {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(uri(path))
                 .header("Authorization", "Bearer " + effectiveApiKey())
+                .header("X-POI-Client", CLIENT_HEADER)
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .method("PATCH", HttpRequest.BodyPublishers.ofString(jsonBody))
@@ -181,34 +285,42 @@ public class ApiClient {
             throw new ApiException("Network error: " + e.getMessage());
         }
 
-        if (resp.statusCode() == 401) {
-            throw new ApiException("Unauthorized — check your API key with /poi setkey");
+        int status = resp.statusCode();
+        if (status >= 200 && status < 300) return resp.body();
+        if (status == 401) {
+            throw new ApiException("Unauthorized — check your API key with /poi setkey", status);
         }
-        if (resp.statusCode() == 404) {
-            throw new ApiException("Not found (404)");
-        }
-        if (resp.statusCode() == 409) {
-            throw new ApiException("Data migration required — visit the website to migrate your data");
-        }
-        if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
-            // Try to extract error message from JSON body
-            try {
-                ApiModels.ErrorResponse err = GSON.fromJson(resp.body(), ApiModels.ErrorResponse.class);
-                if (err != null && err.error != null) {
-                    throw new ApiException("Server error: " + err.error);
-                }
-            } catch (Exception ignored) {}
-            throw new ApiException("Server returned HTTP " + resp.statusCode());
-        }
+        // The site explains most refusals (a role that can't do this, an expired invite, ...)
+        String message = serverMessage(resp.body());
+        if (message != null) throw new ApiException(message, status);
+        throw new ApiException(status == 404 ? "Not found (404)" : "Server returned HTTP " + status, status);
+    }
 
-        return resp.body();
+    private static String serverMessage(String body) {
+        try {
+            ApiModels.ErrorResponse err = GSON.fromJson(body, ApiModels.ErrorResponse.class);
+            return err != null && err.error != null && !err.error.isBlank() ? err.error : null;
+        } catch (Exception e) {
+            return null; // not JSON
+        }
     }
 
     // ── Exception type ─────────────────────────────────────────────────────────
 
     public static class ApiException extends Exception {
+        /** The HTTP status, or 0 when the request never got an answer. */
+        public final int status;
+
         public ApiException(String message) {
-            super(message);
+            this(message, 0);
         }
+
+        public ApiException(String message, int status) {
+            super(message);
+            this.status = status;
+        }
+
+        public boolean isForbidden() { return status == 403; }
+        public boolean isNotFound()  { return status == 404; }
     }
 }

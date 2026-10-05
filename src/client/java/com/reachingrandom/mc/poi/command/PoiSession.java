@@ -41,6 +41,22 @@ public final class PoiSession {
         return lastWorldsList.size();
     }
 
+    // ── Every world from the last world list, for role and server lookups ──────
+    private volatile List<ApiModels.WorldSummary> knownWorlds = Collections.emptyList();
+
+    public void setKnownWorlds(List<ApiModels.WorldSummary> worlds) {
+        this.knownWorlds = List.copyOf(worlds);
+    }
+
+    /** The summary of the world with this id from the last world list, or null. */
+    public ApiModels.WorldSummary knownWorld(String worldId) {
+        if (worldId == null) return null;
+        for (ApiModels.WorldSummary w : knownWorlds) {
+            if (worldId.equals(w.id)) return w;
+        }
+        return null;
+    }
+
     // ── Groups list (from last /poi groups) ────────────────────────────────────
     private volatile List<ApiModels.WorldItem> lastGroupsList = Collections.emptyList();
 

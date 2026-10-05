@@ -60,6 +60,12 @@ public class PoiConfig {
         public String groupName;
     }
 
+    /**
+     * Whether joining a server selects the world shared with you that an admin bound to
+     * that server, when you haven't picked one for it yourself.
+     */
+    public boolean autoSelectSharedWorlds = true;
+
     /** Whether placed/right-clicked campfires can be named into the "Campsites" group. */
     public boolean campfireCampsites = true;
 
