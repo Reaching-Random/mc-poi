@@ -11,8 +11,8 @@ import java.util.Map;
  * In-memory lookup of campsite POIs for the selected world, keyed by
  * dimension + block position.
  *
- * <p>A campfire is linked to a POI purely by location: any POI inside the root-level
- * {@value #GROUP_NAME} group whose coordinates equal the campfire's block position
+ * <p>A campfire is linked to a POI purely by location: any POI inside the campsite
+ * group (see {@link #findGroup}) whose coordinates equal the campfire's block position
  * (in the same dimension) is that campfire's POI. No extra fields are stored, so the
  * data stays compatible with the website and the AppState file format.
  *
@@ -68,13 +68,25 @@ public final class CampsiteIndex {
         return snapshot.pois();
     }
 
-    /** Returns the root-level {@value #GROUP_NAME} group (case-insensitive), or null. */
+    /**
+     * Returns the campsite group: the one the site flagged ({@code system: "campsites"}), else
+     * a root-level {@value #GROUP_NAME} group (case-insensitive) from before the flag existed
+     * or from an offline file. Null if there is none.
+     */
     public static ApiModels.WorldItem findGroup(List<ApiModels.WorldItem> items) {
         if (items == null) return null;
         for (ApiModels.WorldItem item : items) {
-            if ("group".equals(item.type) && GROUP_NAME.equalsIgnoreCase(item.name)) return item;
+            if ("group".equals(item.type) && "campsites".equals(item.system)) return item;
+        }
+        for (ApiModels.WorldItem item : items) {
+            if ("group".equals(item.type) && GROUP_NAME.equalsIgnoreCase(item.name != null ? item.name.trim() : null)) return item;
         }
         return null;
+    }
+
+    /** Whether this group is the campsite group, which campfires manage. */
+    public static boolean isCampsiteGroup(List<ApiModels.WorldItem> items, ApiModels.WorldItem group) {
+        return group != null && group == findGroup(items);
     }
 
     /** Returns the POI inside {@code group} at the given location, or null. */

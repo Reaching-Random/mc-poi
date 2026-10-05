@@ -1,5 +1,6 @@
 package com.reachingrandom.mc.poi.campsite;
 
+import com.reachingrandom.mc.poi.api.ApiClient;
 import com.reachingrandom.mc.poi.api.ApiModels;
 import com.reachingrandom.mc.poi.command.PoiCommand;
 import com.reachingrandom.mc.poi.command.PoiSession;
@@ -28,7 +29,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashSet;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -196,7 +196,7 @@ public final class CampsiteTracker {
             } else if (seen.remove(key)) {
                 ApiModels.WorldItem poi = entry.getValue();
                 if (poi.id != null && deleting.add(poi.id)) {
-                    deleteCampsite(worldId, poi, "Campfire gone — removed campsite: ");
+                    removeBrokenCampsite(worldId, key, poi);
                 }
             }
         }
@@ -232,15 +232,14 @@ public final class CampsiteTracker {
 
                 if (existing == null) {
                     if (name.isEmpty()) return;
-                    if (group == null) group = storage.createGroup(worldId, CampsiteIndex.GROUP_NAME);
-                    storage.createPoi(worldId, group.id, name, "",
-                            pos.getX(), pos.getY(), pos.getZ(), dimension);
+                    storage.createCampsite(worldId, name, dimension, pos.getX(), pos.getY(), pos.getZ());
                     chat("§a[POI] Campsite saved: " + name + "§r");
                 } else if (name.isEmpty()) {
-                    deleteCampsite(storage, worldId, existing, "Removed campsite: ");
-                    return; // deleteCampsite refreshes
+                    storage.deleteCampsite(worldId, existing.id);
+                    forgetCampsite(storage, worldId, existing, "Removed campsite: ");
+                    return; // forgetCampsite refreshes
                 } else {
-                    storage.updatePoi(worldId, existing.id, name, null);
+                    storage.renameCampsite(worldId, existing.id, name);
                     String poiId = existing.id;
                     Minecraft.getInstance().execute(() -> PoiSession.get().getTrackedPois().stream()
                             .filter(p -> poiId.equals(p.id))
@@ -248,6 +247,10 @@ public final class CampsiteTracker {
                     chat("§a[POI] Campsite renamed: " + existing.name + " → " + name + "§r");
                 }
                 PoiCommand.refreshPoiList(storage, worldId);
+            } catch (ApiClient.ApiException e) {
+                // On a shared world the site explains refusals, e.g. renaming someone else's campsite
+                if (e.status == 409) PoiCommand.refreshPoiListAsync(worldId); // someone named it first
+                chat("§c[POI] " + e.getMessage() + "§r");
             } catch (Exception e) {
                 LOGGER.error("[POI] Failed to save campsite", e);
                 chat("§c[POI] Couldn't save campsite: " + e.getMessage() + "§r");
@@ -255,18 +258,24 @@ public final class CampsiteTracker {
         });
     }
 
-    private static void deleteCampsite(String worldId, ApiModels.WorldItem poi, String message) {
+    /**
+     * The campfire was seen here this session and is gone now. Online this succeeds even
+     * if another player's mod already removed it, so everyone who saw it break agrees.
+     */
+    private static void removeBrokenCampsite(String worldId, CampsiteIndex.Key key, ApiModels.WorldItem poi) {
         CompletableFuture.runAsync(() -> {
             try {
-                deleteCampsite(PoiStorageProvider.get(), worldId, poi, message);
+                PoiStorage storage = PoiStorageProvider.get();
+                BlockPos pos = key.pos();
+                storage.removeCampsiteAt(worldId, key.dimension(), pos.getX(), pos.getY(), pos.getZ());
+                forgetCampsite(storage, worldId, poi, "Campfire gone — removed campsite: ");
             } catch (Exception e) {
-                String msg = String.valueOf(e.getMessage());
-                if (msg.toLowerCase(Locale.ROOT).contains("not found")) {
+                if (e instanceof ApiClient.ApiException api && api.isNotFound()) {
                     // Already deleted elsewhere (e.g. on the website): just resync the index
                     PoiCommand.refreshPoiListAsync(worldId);
                 } else {
-                    LOGGER.error("[POI] Failed to delete campsite", e);
-                    chat("§c[POI] Couldn't remove campsite " + poi.name + ": " + msg + "§r");
+                    LOGGER.error("[POI] Failed to remove campsite", e);
+                    chat("§c[POI] Couldn't remove campsite " + poi.name + ": " + e.getMessage() + "§r");
                 }
             } finally {
                 deleting.remove(poi.id);
@@ -274,10 +283,9 @@ public final class CampsiteTracker {
         });
     }
 
-    /** Deletes a campsite POI and untracks it. Runs on a background thread. */
-    private static void deleteCampsite(PoiStorage storage, String worldId,
-                                       ApiModels.WorldItem poi, String message) throws Exception {
-        storage.deletePoi(worldId, poi.id);
+    /** Untracks a removed campsite and resyncs the index. Runs on a background thread. */
+    private static void forgetCampsite(PoiStorage storage, String worldId,
+                                       ApiModels.WorldItem poi, String message) {
         Minecraft.getInstance().execute(() -> {
             PoiSession.get().removeTrackedPoiById(poi.id);
             PoiConfig cfg = PoiConfig.get();
