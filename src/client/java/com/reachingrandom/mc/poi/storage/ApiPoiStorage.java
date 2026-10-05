@@ -64,4 +64,32 @@ public class ApiPoiStorage implements PoiStorage {
     public void deletePoi(String worldId, String poiId) throws ApiClient.ApiException {
         apiClient.deletePoi(worldId, poiId);
     }
+
+    // ── Campsites ─────────────────────────────────────────────────────────────
+
+    @Override
+    public ApiModels.WorldItem createCampsite(String worldId, String name, String dimension,
+                                              int x, int y, int z) throws ApiClient.ApiException {
+        return apiClient.createCampsite(worldId, name, dimension, x, y, z);
+    }
+
+    @Override
+    public void removeCampsiteAt(String worldId, String dimension, int x, int y, int z) throws ApiClient.ApiException {
+        apiClient.removeCampsiteAt(worldId, dimension, x, y, z);
+    }
+
+    @Override
+    public ApiModels.WorldItem renameCampsite(String worldId, String poiId, String name) throws ApiClient.ApiException {
+        return apiClient.renameCampsite(worldId, poiId, name);
+    }
+
+    @Override
+    public void deleteCampsite(String worldId, String poiId) throws ApiClient.ApiException {
+        apiClient.deleteCampsite(worldId, poiId);
+    }
+
+    /** The client behind this storage, for sharing and linking calls that only exist online. */
+    public ApiClient client() {
+        return apiClient;
+    }
 }

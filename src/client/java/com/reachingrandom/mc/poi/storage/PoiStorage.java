@@ -2,6 +2,8 @@ package com.reachingrandom.mc.poi.storage;
 
 import com.reachingrandom.mc.poi.api.ApiClient;
 import com.reachingrandom.mc.poi.api.ApiModels;
+import com.reachingrandom.mc.poi.campsite.CampsiteIndex;
+import net.minecraft.core.BlockPos;
 
 import java.util.List;
 
@@ -53,4 +55,33 @@ public interface PoiStorage {
      * Throws {@link ApiClient.ApiException} if the POI or world is not found.
      */
     void deletePoi(String worldId, String poiId) throws ApiClient.ApiException;
+
+    // ── Campsites ─────────────────────────────────────────────────────────────
+    // Online, these go to the site's campsite endpoints, which keep the campsite group
+    // locked and let every role name and break campfires. Offline there are no roles,
+    // so the defaults below use the plain item operations.
+
+    /** Saves a named campfire as a campsite, creating the campsite group if needed. */
+    default ApiModels.WorldItem createCampsite(String worldId, String name, String dimension,
+                                               int x, int y, int z) throws ApiClient.ApiException {
+        ApiModels.WorldItem group = CampsiteIndex.findGroup(listItems(worldId));
+        if (group == null) group = createGroup(worldId, CampsiteIndex.GROUP_NAME);
+        return createPoi(worldId, group.id, name, "", x, y, z, dimension);
+    }
+
+    /** Removes the campsite at a broken campfire. Does nothing if there is none. */
+    default void removeCampsiteAt(String worldId, String dimension, int x, int y, int z) throws ApiClient.ApiException {
+        ApiModels.WorldItem group = CampsiteIndex.findGroup(listItems(worldId));
+        ApiModels.WorldItem poi = CampsiteIndex.findIn(group, dimension, new BlockPos(x, y, z));
+        if (poi != null) deletePoi(worldId, poi.id);
+    }
+
+    default ApiModels.WorldItem renameCampsite(String worldId, String poiId, String name) throws ApiClient.ApiException {
+        return updatePoi(worldId, poiId, name, null);
+    }
+
+    /** Deletes a campsite by blanking its name. Online, an admin can restore it. */
+    default void deleteCampsite(String worldId, String poiId) throws ApiClient.ApiException {
+        deletePoi(worldId, poiId);
+    }
 }

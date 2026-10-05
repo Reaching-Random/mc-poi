@@ -263,6 +263,9 @@ public final class PoiCommand {
                     .executes(ctx -> executeUntrackNumbers(ctx.getSource(),
                             getString(ctx, "numbers"))))
         );
+
+        // /world share|invites|members|leave, /poi link|unlink
+        SharingCommands.register(dispatcher);
     }
 
     // ── Help ──────────────────────────────────────────────────────────────────
@@ -273,6 +276,13 @@ public final class PoiCommand {
         send(source, gray("  /world add [name]      ") + "Create a new world entry");
         send(source, gray("  /world select [number]") + "Select world for this save/server (auto-selects if no #)");
         send(source, gray("  /world clear          ") + "Clear currently selected world");
+        send(source, "");
+        send(source, gray("  Shared worlds (online mode):"));
+        send(source, gray("  /world share <role> <player...>") + " Invite players on this server (admin)");
+        send(source, gray("      roles: read-only, contribute, admin"));
+        send(source, gray("  /world invites        ") + "List pending invites, revoke one (admin)");
+        send(source, gray("  /world members        ") + "List members and their roles");
+        send(source, gray("  /world leave          ") + "Leave a world someone shared with you");
         send(source, "");
         send(source, gray("Run ") + "/poi help" + gray(" for POI and category commands."));
         return 1;
@@ -303,6 +313,8 @@ public final class PoiCommand {
         send(source, gray("  /poi untrack <#> [# ...]  ") + "Untrack one or more POIs");
         send(source, gray("  /poi track clear          ") + "Stop tracking all POIs");
         send(source, gray("  /poi campfires [on|off]   ") + "Name campfires to save them as Campsites");
+        send(source, gray("  /poi link                 ") + "Link this Minecraft account (names you in shared worlds)");
+        send(source, gray("  /poi unlink               ") + "Unlink this Minecraft account");
         send(source, "");
         send(source, gray("  /pois             ") + "Shortcut for /poi list (current dimension)");
         send(source, gray("  /pois all         ") + "Shortcut for /poi list all");
@@ -380,7 +392,9 @@ public final class PoiCommand {
             sendComponent(source, fileLine);
         }
         if (cfg.currentWorldId != null) {
-            send(source, gray("  World:  " + cfg.currentWorldId));
+            ApiModels.WorldSummary w = PoiSession.get().knownWorld(cfg.currentWorldId);
+            send(source, gray("  World:  " + (w != null ? w.name : cfg.currentWorldId)
+                    + (w != null && w.role != null ? " (your role: " + w.role + ")" : "")));
         } else {
             send(source, gray("  World:  (none selected — run /world list)"));
         }
@@ -388,6 +402,13 @@ public final class PoiCommand {
             send(source, gray("  Group:  " + (cfg.currentGroupName != null ? cfg.currentGroupName : cfg.currentGroupId)));
         }
         send(source, gray("  Campfires: " + (cfg.campfireCampsites ? "on" : "off") + " (/poi campfires)"));
+        if (cfg.isOnlineMode() && cfg.hasApiKey()) {
+            String me = Minecraft.getInstance().getUser().getProfileId().toString();
+            async(source, () -> {
+                boolean linked = new ApiClient().getLinkedAccounts().stream().anyMatch(a -> me.equals(a.uuid));
+                send(source, gray("  Linked: " + (linked ? "yes" : "no — run /poi link so shared worlds show your name")));
+            });
+        }
         return 1;
     }
 
@@ -538,6 +559,7 @@ public final class PoiCommand {
         async(source, () -> {
             PoiStorage storage = PoiStorageProvider.get();
             List<ApiModels.WorldSummary> worlds = storage.listWorlds();
+            PoiSession.get().setKnownWorlds(worlds);
 
             if (worlds.isEmpty()) {
                 send(source, gray("No worlds found. Use /world add to create one."));
@@ -587,6 +609,7 @@ public final class PoiCommand {
                 else if (isSelected)                marker = " §c[Selected]§r";
                 else if (isSeedMatch)               marker = " §b[Seed Match]§r";
 
+                if (w.isShared()) marker += " §d[shared, " + w.role + "]§r";
                 send(source, "  §e" + (globalOffset + i + 1) + ".§r " + w.name + marker);
             }
 
@@ -613,6 +636,7 @@ public final class PoiCommand {
 
             PoiConfig.get().bindWorld(place, world.id);
             switchWorld(world.id);
+            SharingCommands.rememberServer(place, world);
 
             send(source, ok("World \"" + world.name + "\" created and selected."));
             if (!seed.isBlank()) {
@@ -642,7 +666,7 @@ public final class PoiCommand {
      * Makes {@code worldId} the selected POI world ({@code null} = none): drops the
      * previous world's lists, tracked POIs and campsites, then loads the new world's.
      */
-    private static void switchWorld(String worldId) {
+    static void switchWorld(String worldId) {
         worldEpoch.incrementAndGet();
         PoiConfig.get().activateWorld(worldId);
         PoiSession.get().clearWorldState();
@@ -680,6 +704,7 @@ public final class PoiCommand {
                 return;
             }
             if (worldEpoch.get() != epoch) return;
+            PoiSession.get().setKnownWorlds(worlds);
 
             String boundId = cfg.getBinding(place);
             ApiModels.WorldSummary bound = boundId == null ? null : worlds.stream()
@@ -688,6 +713,18 @@ public final class PoiCommand {
             if (bound != null) {
                 switchWorld(bound.id);
                 if (!onJoin) out.accept(ok(prefix + "World selected: " + bound.name));
+                return;
+            }
+
+            // A world shared with you that an admin bound to this server
+            List<ApiModels.WorldSummary> onThisServer = place == null || !place.startsWith("mp:") || !cfg.autoSelectSharedWorlds
+                    ? List.of()
+                    : worlds.stream().filter(w -> place.substring(3).equals(w.serverAddress)).toList();
+            if (onThisServer.size() == 1) {
+                ApiModels.WorldSummary shared = onThisServer.get(0);
+                cfg.bindWorld(place, shared.id);
+                switchWorld(shared.id);
+                out.accept(ok(prefix + "World auto-selected for this server: " + shared.name));
                 return;
             }
 
@@ -728,8 +765,10 @@ public final class PoiCommand {
             return 0;
         }
 
-        PoiConfig.get().bindWorld(getPlaceKey(), world.id);
+        String place = getPlaceKey();
+        PoiConfig.get().bindWorld(place, world.id);
         switchWorld(world.id);
+        SharingCommands.rememberServer(place, world);
 
         send(source, ok("Selected: " + world.name));
         String currentSeed = getCurrentSeed();
@@ -1424,7 +1463,7 @@ public final class PoiCommand {
         return true;
     }
 
-    private static String requireCurrentWorld(FabricClientCommandSource source) {
+    static String requireCurrentWorld(FabricClientCommandSource source) {
         String worldId = PoiConfig.get().currentWorldId;
         if (worldId == null || worldId.isBlank()) {
             send(source, err("No current world selected."));
@@ -1455,7 +1494,7 @@ public final class PoiCommand {
      * which its POI world is remembered. Returns null when there is nothing stable
      * to key on.
      */
-    private static String getPlaceKey() {
+    static String getPlaceKey() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.hasSingleplayerServer() && mc.getSingleplayerServer() != null) {
             // The seed is part of the key so that a new world created under a
@@ -1630,7 +1669,7 @@ public final class PoiCommand {
                 .withStyle(s -> s
                         .withColor(ChatFormatting.AQUA)
                         .withUnderlined(true)
-                        .withClickEvent(new ClickEvent.RunCommand("/poi copyurl " + url)));
+                        .withClickEvent(new ClickEvent.OpenUrl(java.net.URI.create(url))));
     }
 
     /**
@@ -1646,28 +1685,28 @@ public final class PoiCommand {
                         .withClickEvent(new ClickEvent.OpenFile(pathStr)));
     }
 
-    private static String header(String text) {
+    static String header(String text) {
         return "§7§m-----§r §f§l" + text + "§r §7§m-----§r";
     }
 
-    private static String ok(String text)   { return "§a" + text + "§r"; }
-    private static String err(String text)  { return "§c" + text + "§r"; }
-    private static String gray(String text) { return "§7" + text + "§r"; }
+    static String ok(String text)   { return "§a" + text + "§r"; }
+    static String err(String text)  { return "§c" + text + "§r"; }
+    static String gray(String text) { return "§7" + text + "§r"; }
 
     /** Chat message outside of a command (no command source available). */
-    private static void chat(String legacyText) {
+    static void chat(String legacyText) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
             if (mc.player != null) mc.player.sendSystemMessage(Component.literal(legacyText));
         });
     }
 
-    private static void send(FabricClientCommandSource source, String legacyText) {
+    static void send(FabricClientCommandSource source, String legacyText) {
         Minecraft.getInstance().execute(() ->
                 source.sendFeedback(Component.literal(legacyText)));
     }
 
-    private static void sendComponent(FabricClientCommandSource source, Component component) {
+    static void sendComponent(FabricClientCommandSource source, Component component) {
         Minecraft.getInstance().execute(() -> source.sendFeedback(component));
     }
 
@@ -1675,7 +1714,7 @@ public final class PoiCommand {
      * Runs a storage operation off the main thread, then dispatches chat feedback
      * back onto the render thread.  Errors are shown in chat automatically.
      */
-    private static void async(FabricClientCommandSource source, ApiCallable call) {
+    static void async(FabricClientCommandSource source, ApiCallable call) {
         CompletableFuture.runAsync(() -> {
             try {
                 call.run();
@@ -1690,7 +1729,7 @@ public final class PoiCommand {
     }
 
     @FunctionalInterface
-    private interface ApiCallable {
+    interface ApiCallable {
         void run() throws Exception;
     }
 }

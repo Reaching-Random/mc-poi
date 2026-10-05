@@ -21,8 +21,25 @@ public final class ApiModels {
         public String id;
         public String name;
         public String seed;
+        /** Your role in this world: read-only, contribute, admin or owner. Null offline (your own world). */
+        public String role;
+        /** The multiplayer server this world is played on, if an admin bound it. */
+        public String serverAddress;
         public String created;
         public String modified;
+
+        /** Whether someone else owns this world, so it was shared with you. */
+        public boolean isShared() {
+            return role != null && !"owner".equals(role);
+        }
+
+        public boolean canAdd() {
+            return role == null || !"read-only".equals(role);
+        }
+
+        public boolean isAdmin() {
+            return role == null || "owner".equals(role) || "admin".equals(role);
+        }
     }
 
     // ── /api/mc/poi/worlds (POST) ──────────────────────────────────────────────
@@ -91,10 +108,15 @@ public final class ApiModels {
          *  not captured by any mod command yet. */
         public Coords nearestPortal;
 
+        /** Site user who added it. Online only. */
+        public String createdBy;
+
         // ── Group fields ──────────────────────────────────────────────────────
         public List<WorldItem> items;
         /** UI expand/collapse hint used by the website. Preserved as-is. */
         public Boolean isExpanded;
+        /** {@code "campsites"} on the locked group that campfires manage. */
+        public String system;
     }
 
     public static class Coords {
@@ -157,6 +179,148 @@ public final class ApiModels {
 
     public static class CreateGroupResponse {
         public WorldItem group;
+    }
+
+    // ── Campsites (/worlds/:worldId/campsites) ────────────────────────────────
+    public static class CreateCampsiteRequest {
+        public String name;
+        public String dimension;
+        public int x;
+        public int y;
+        public int z;
+
+        public CreateCampsiteRequest(String name, String dimension, int x, int y, int z) {
+            this.name = name;
+            this.dimension = dimension;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+    }
+
+    public static class RenameRequest {
+        public String name;
+
+        public RenameRequest(String name) {
+            this.name = name;
+        }
+    }
+
+    public static class PoiResponse {
+        public WorldItem poi;
+    }
+
+    // ── Sharing ───────────────────────────────────────────────────────────────
+    public static class RevResponse {
+        public long rev;
+    }
+
+    public static class ServerAddressRequest {
+        public String serverAddress;
+
+        public ServerAddressRequest(String serverAddress) {
+            this.serverAddress = serverAddress;
+        }
+    }
+
+    public static class Member {
+        public String name;
+        public String role;
+        public boolean isYou;
+    }
+
+    public static class MembersResponse {
+        public List<Member> members;
+    }
+
+    public static class Player {
+        public String uuid;
+        public String name;
+
+        public Player(String uuid, String name) {
+            this.uuid = uuid;
+            this.name = name;
+        }
+    }
+
+    public static class InvitePlayersRequest {
+        public String role;
+        public List<Player> players;
+
+        public InvitePlayersRequest(String role, List<Player> players) {
+            this.role = role;
+            this.players = players;
+        }
+    }
+
+    public static class InviteResult {
+        public String name;
+        /** addressed (sent to their game), link (pass {@link #url} on) or member (already in). */
+        public String kind;
+        public String url;
+    }
+
+    public static class InvitePlayersResponse {
+        public List<InviteResult> results;
+    }
+
+    public static class Invite {
+        public String id;
+        public String role;
+        public String label;
+        public String status;
+        public boolean addressed;
+        public String expiresAt;
+    }
+
+    public static class InvitesResponse {
+        public List<Invite> invites;
+    }
+
+    /** An invite sent to one of your linked Minecraft accounts. */
+    public static class PendingInvite {
+        public String id;
+        public String worldId;
+        public String worldName;
+        public String role;
+        public String invitedBy;
+    }
+
+    public static class PendingInvitesResponse {
+        public List<PendingInvite> invites;
+    }
+
+    public static class WorldIdResponse {
+        public String worldId;
+    }
+
+    // ── Account linking (/link) ───────────────────────────────────────────────
+    public static class NonceResponse {
+        public String nonce;
+    }
+
+    public static class LinkRequest {
+        public String username;
+        public String nonce;
+
+        public LinkRequest(String username, String nonce) {
+            this.username = username;
+            this.nonce = nonce;
+        }
+    }
+
+    public static class LinkedAccount {
+        public String uuid;
+        public String name;
+        public boolean primary;
+    }
+
+    public static class LinkResponse {
+        public LinkedAccount account;
+    }
+
+    public static class LinkedAccountsResponse {
+        public List<LinkedAccount> accounts;
     }
 
     // ── Error envelope ────────────────────────────────────────────────────────
