@@ -12,6 +12,7 @@
 
 - **Offline by default** — No account required. POIs are stored locally in a JSON file compatible with the Reaching Random website's import/export format.
 - **Cloud sync** — Connect your Reaching Random account to sync POIs across devices and view them on the website.
+- **Shared worlds** — Share a world with everyone on your server, each with a role (read-only, contribute, admin, owner), from the [POI Tracker](https://reachingrandom.com/mc/poi) or with `/world share`. Changes from other players show up within 30 seconds.
 - **Download snapshot** — Fetch your cloud data to a local file with `/poi download` for offline access or backup.
 - **Multi-World & Groups** — Organize POIs by world and nested groups (categories).
 - **Per-World Selection** — Each singleplayer world and each server remembers its own POI world, tracked POIs and group. Singleplayer worlds are matched by seed automatically; on a server (where the seed is hidden) you pick the world once and it sticks.
@@ -77,6 +78,7 @@ Files use the same JSON format as the Reaching Random website's import/export fe
 2. In Minecraft:
 ```mcfunction
 /poi setkey <your-api-key>    # Saves key and switches to online mode
+/poi link                     # Links this Minecraft account (names you in shared worlds)
 /world list                   # Lists your cloud worlds (auto-selects if seed matches)
 /poi add "My Base"            # Saves to the cloud immediately
 ```
@@ -115,6 +117,21 @@ The downloaded file is tied to your API key via a hash — you can switch betwee
 | `/world select [#]` | Select a world for the Minecraft world or server you are in (with no number: the remembered world, or the one matching the seed) |
 | `/world clear` | Deselect the current world and forget it for this Minecraft world or server |
 | `/worlds [page]` | Alias for `/world list` |
+
+### Shared Worlds (online mode)
+
+Roles: **read-only** sees and tracks POIs and names campfires; **contribute** also adds POIs and groups and changes its own; **admin** changes anything and invites; **owner** also deletes the world and manages admins (on the website).
+
+| Command | Description |
+|---------|-------------|
+| `/world share <role> <player...>` | Invite players who are on this server (admin). Linked players get the invite in game; for others you get a link to pass on |
+| `/world invites` | List pending invites for the selected world, with **[Revoke]** (admin) |
+| `/world members` | List the selected world's members and roles |
+| `/world leave` | Leave a world someone shared with you |
+| `/poi link` | Link this Minecraft account to your Reaching Random account. Run it once per account |
+| `/poi unlink` | Unlink this Minecraft account |
+
+Invites sent to a linked account show up in chat with **[Accept]** and **[Decline]**. When an admin selects a shared world on a server, other members' mods select it automatically when they join that server (`autoSelectSharedWorlds` in the config, on by default).
 
 ### Group Management
 
@@ -157,7 +174,9 @@ Campfires can be saved as POIs, named much like a sign:
 - **Right-click** any campfire with an empty main hand to name or rename it. This also works on campfires placed before you installed the mod. Clearing the name removes the campsite.
 - **Break** the campfire and its POI is deleted and untracked.
 
-A campsite is linked to its campfire by position: any POI in the Campsites group at the campfire's exact block coordinates (same dimension) belongs to it. Everything runs on your client, so it works on any server, and campsites land in *your* POI list only.
+A campsite is linked to its campfire by position: any POI in the Campsites group at the campfire's exact block coordinates (same dimension) belongs to it. Everything runs on your client, so it works on any server, and campsites land in the selected POI world.
+
+In a shared world the Campsites group is locked: POIs can't be added to it, moved in or out, or edited from the website or commands. Every member, read-only included, can name a campfire and remove a campsite by breaking it. Only the person who named a campsite, or an admin, can rename it or clear its name. A removed campsite can be restored by an admin on the website for 30 days.
 
 A POI is only removed automatically if the mod saw the campfire earlier in the same session and then saw it disappear. If a campfire is broken while you're logged out, delete its POI with `/poi delete`. Turn the feature off with `/poi campfires off`.
 
