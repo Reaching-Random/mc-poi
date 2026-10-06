@@ -9,6 +9,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import com.reachingrandom.mc.poi.Pointsofinterest;
 import com.reachingrandom.mc.poi.api.ApiClient;
 import com.reachingrandom.mc.poi.api.ApiModels;
 import com.reachingrandom.mc.poi.config.PoiConfig;
@@ -58,11 +59,6 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.lit
 public final class SharingCommands {
 
     private static final List<String> ROLES = List.of("read-only", "contribute", "admin");
-
-    /** Seconds between revision checks of the selected world, and between invite checks. */
-    private static final int REV_POLL_TICKS = 30 * 20;
-    private static final int INVITE_POLL_TICKS = 120 * 20;
-    private static final int INVITE_CHECK_AFTER_JOIN_TICKS = 5 * 20;
 
     private SharingCommands() {}
 
@@ -207,10 +203,15 @@ public final class SharingCommands {
             List<ApiModels.InviteResult> results = client.invitePlayers(worldId, role, players);
             send(source, header("Invites to " + worldName + " (" + role + ")"));
             for (ApiModels.InviteResult r : results) {
-                switch (r.kind) {
+                String kind = r.kind != null ? r.kind : "";
+                switch (kind) {
                     case "addressed" -> send(source, ok("  " + r.name + ": invite sent to their game"));
                     case "member" -> send(source, gray("  " + r.name + " is already a member"));
-                    default -> {
+                    case "link" -> {
+                        if (r.url == null) {
+                            send(source, gray("  " + r.name + ": invited (see Share on the website for the link)"));
+                            break;
+                        }
                         MutableComponent line = Component.literal("  " + r.name + ": ")
                                 .append(button("[Copy link]", ChatFormatting.AQUA,
                                         new ClickEvent.CopyToClipboard(r.url), "Copy the invite link"))
@@ -219,6 +220,8 @@ public final class SharingCommands {
                                         new ClickEvent.OpenUrl(URI.create(r.url)), r.url));
                         sendComponent(source, line);
                     }
+                    // A result type from a newer site: say what it is rather than fail
+                    default -> send(source, gray("  " + r.name + ": " + (kind.isEmpty() ? "done" : kind)));
                 }
             }
             if (results.stream().anyMatch(r -> "link".equals(r.kind))) {
@@ -344,15 +347,15 @@ public final class SharingCommands {
 
         send(source, gray("Linking " + user.getName() + " with Mojang's help..."));
         async(source, () -> {
-            String nonce = client.createLinkNonce();
+            ApiModels.LinkedAccount account;
             try {
-                mc.services().sessionService().joinServer(user.getProfileId(), user.getAccessToken(), nonce);
+                account = linkNow(client);
             } catch (AuthenticationException e) {
                 send(source, err("Mojang couldn't confirm your session: " + e.getMessage()));
                 send(source, gray("  Restart the game from the Minecraft Launcher and try again."));
                 return;
             }
-            ApiModels.LinkedAccount account = client.link(user.getName(), nonce);
+            linkedProfile = user.getProfileId();
             send(source, ok("Linked " + account.name + " to your Reaching Random account."));
             send(source, gray("  Shared-world members now see you as " + account.name
                     + (account.primary ? "" : " (if it's your primary account; change that in Settings on the site)")
@@ -361,12 +364,55 @@ public final class SharingCommands {
         return 1;
     }
 
+    /** The account linked (or found linked) this session, so join doesn't check again. */
+    private static volatile java.util.UUID linkedProfile;
+
+    /**
+     * The handshake itself: a one-time nonce from the site, a "join" on Mojang's session
+     * server with it, then the site checks with Mojang. Throws if Mojang refuses the session
+     * (it's too old: the game needs restarting from the launcher) or the site refuses the link.
+     */
+    private static ApiModels.LinkedAccount linkNow(ApiClient client) throws Exception {
+        Minecraft mc = Minecraft.getInstance();
+        User user = mc.getUser();
+        String nonce = client.createLinkNonce();
+        mc.services().sessionService().joinServer(user.getProfileId(), user.getAccessToken(), nonce);
+        return client.link(user.getName(), nonce);
+    }
+
+    /**
+     * Links the signed-in account if it isn't linked yet, without a word on failure: after
+     * {@code /poi setkey}, and on every join until it works. A stale session (the launcher has
+     * been open for days) just leaves it for the next join after a restart. {@code /poi link}
+     * is the version that reports errors.
+     */
+    public static void autoLink() {
+        PoiConfig cfg = PoiConfig.get();
+        if (!cfg.isOnlineMode() || !cfg.hasApiKey()) return;
+        java.util.UUID me = Minecraft.getInstance().getUser().getProfileId();
+        if (me == null || me.equals(linkedProfile)) return;
+        CompletableFuture.runAsync(() -> {
+            try {
+                ApiClient client = new ApiClient();
+                boolean linked = client.getLinkedAccounts().stream().anyMatch(a -> me.toString().equals(a.uuid));
+                if (!linked) {
+                    ApiModels.LinkedAccount account = linkNow(client);
+                    chat("§7[POI] Linked " + account.name + " to your Reaching Random account.§r");
+                }
+                linkedProfile = me;
+            } catch (Exception e) {
+                Pointsofinterest.LOGGER.debug("[POI] Automatic account link didn't happen: {}", e.getMessage());
+            }
+        });
+    }
+
     private static int executeUnlink(FabricClientCommandSource source) {
         ApiClient client = onlineClient(source);
         if (client == null) return 0;
         User user = Minecraft.getInstance().getUser();
         async(source, () -> {
             client.unlink(user.getProfileId().toString());
+            linkedProfile = null;
             send(source, ok("Unlinked " + user.getName() + " from your Reaching Random account."));
         });
         return 1;
@@ -379,10 +425,11 @@ public final class SharingCommands {
 
     private static void announce(ApiModels.PendingInvite inv) {
         String who = inv.invitedBy != null ? inv.invitedBy : "Someone";
-        MutableComponent msg = Component.literal("§b[POI]§r " + who + " invited you to §f" + inv.worldName
-                        + "§r as " + inv.role + ". ")
+        String world = inv.worldName != null ? inv.worldName : "a world";
+        String role = inv.role != null ? " as " + inv.role : "";
+        MutableComponent msg = Component.literal("§b[POI]§r " + who + " invited you to §f" + world + "§r" + role + ". ")
                 .append(button("[Accept]", ChatFormatting.GREEN,
-                        new ClickEvent.RunCommand("/poi invite accept " + inv.id), "Join " + inv.worldName))
+                        new ClickEvent.RunCommand("/poi invite accept " + inv.id), "Join " + world))
                 .append(Component.literal(" "))
                 .append(button("[Decline]", ChatFormatting.GRAY,
                         new ClickEvent.RunCommand("/poi invite decline " + inv.id), "Decline the invite"));
@@ -409,7 +456,7 @@ public final class SharingCommands {
             String name = world != null ? world.name : "the world";
             PoiConfig cfg = PoiConfig.get();
             boolean playsHere = world != null && world.serverAddress != null && place != null
-                    && place.equals("mp:" + world.serverAddress);
+                    && place.equals("mp:" + PoiCommand.normalizeAddress(world.serverAddress));
             if (place != null && (playsHere || cfg.getBinding(place) == null)) {
                 Minecraft.getInstance().execute(() -> {
                     cfg.bindWorld(place, worldId);
@@ -424,27 +471,46 @@ public final class SharingCommands {
     }
 
     // ── Background checks ─────────────────────────────────────────────────────
+    //
+    // One request, GET /poll, paced by the site: it answers with the selected world's
+    // revision, how many invites are waiting, and how long to wait before asking again.
+    // The site can slow everyone down without a release; busy answers (429/503) back off.
 
-    private static int ticks;
-    private static int inviteCheckIn = -1;
-    private static String revWorldId;
-    private static long lastRev = -1;
-    private static final AtomicBoolean revInFlight = new AtomicBoolean();
-    private static final AtomicBoolean invitesInFlight = new AtomicBoolean();
+    /** Used until the site says otherwise, and the bounds any hint is held to. */
+    private static final int DEFAULT_POLL_SECONDS = 30;
+    private static final int MIN_POLL_SECONDS = 15;
+    private static final int MAX_POLL_SECONDS = 15 * 60;
+    private static final int FIRST_POLL_AFTER_JOIN_SECONDS = 5;
+    /** A world is only given up on after this many "not found" answers in a row. */
+    private static final int NOT_FOUND_BEFORE_DESELECT = 2;
+
+    private static final java.util.Random JITTER = new java.util.Random();
+    private static final AtomicBoolean pollInFlight = new AtomicBoolean();
+    private static volatile long nextPollAtMillis = Long.MAX_VALUE;
+    private static volatile int pollSeconds = DEFAULT_POLL_SECONDS;
+    private static volatile int backoffSeconds;
+    private static volatile int notFoundInARow;
+    private static volatile String revWorldId;
+    private static volatile long lastRev = -1;
+    private static volatile int lastPendingInvites;
 
     public static void registerWatcher() {
         ClientTickEvents.END_CLIENT_TICK.register(SharingCommands::onTick);
     }
 
-    /** Called on joining a world or server: check for invites shortly after. */
+    /** Called on joining a world or server: poll shortly after, and link the account if needed. */
     public static void onJoin() {
-        inviteCheckIn = INVITE_CHECK_AFTER_JOIN_TICKS;
         revWorldId = null;
         lastRev = -1;
+        lastPendingInvites = 0;
+        notFoundInARow = 0;
+        backoffSeconds = 0;
+        scheduleIn(FIRST_POLL_AFTER_JOIN_SECONDS);
+        autoLink();
     }
 
     public static void onDisconnect() {
-        inviteCheckIn = -1;
+        nextPollAtMillis = Long.MAX_VALUE;
         revWorldId = null;
         lastRev = -1;
     }
@@ -454,55 +520,85 @@ public final class SharingCommands {
         return cfg.isOnlineMode() && cfg.hasApiKey();
     }
 
-    private static void onTick(Minecraft mc) {
-        if (mc.level == null || mc.player == null || !online()) return;
-        ticks++;
-        if (inviteCheckIn > 0 && --inviteCheckIn == 0) checkInvites();
-        else if (ticks % INVITE_POLL_TICKS == 0) checkInvites();
-        if (ticks % REV_POLL_TICKS == 0) pollRev();
+    /** Waits about {@code seconds}, give or take 20%, so clients don't all ask at once. */
+    private static void scheduleIn(int seconds) {
+        double jitter = 0.8 + 0.4 * JITTER.nextDouble();
+        nextPollAtMillis = System.currentTimeMillis() + (long) (seconds * 1000L * jitter);
     }
 
-    /** Reloads the selected world's POIs when someone else changed it. */
-    private static void pollRev() {
+    private static int clampSeconds(Integer seconds) {
+        if (seconds == null) return DEFAULT_POLL_SECONDS;
+        return Math.max(MIN_POLL_SECONDS, Math.min(MAX_POLL_SECONDS, seconds));
+    }
+
+    private static void onTick(Minecraft mc) {
+        if (mc.level == null || mc.player == null || !online()) return;
+        if (System.currentTimeMillis() >= nextPollAtMillis && pollInFlight.compareAndSet(false, true)) poll();
+    }
+
+    private static void poll() {
         String worldId = PoiConfig.get().currentWorldId;
-        if (worldId == null || !revInFlight.compareAndSet(false, true)) return;
         CompletableFuture.runAsync(() -> {
+            int next = pollSeconds;
             try {
-                long rev = new ApiClient().getRev(worldId);
-                if (!worldId.equals(PoiConfig.get().currentWorldId)) return;
-                if (worldId.equals(revWorldId) && rev != lastRev) PoiCommand.refreshPoiListAsync(worldId);
-                revWorldId = worldId;
-                lastRev = rev;
+                ApiModels.PollResponse resp = new ApiClient().poll(worldId);
+                backoffSeconds = 0;
+                notFoundInARow = 0;
+                pollSeconds = next = clampSeconds(resp.pollSeconds);
+                onWorldRev(worldId, resp.rev);
+                onPendingInvites(resp.pendingInvites != null ? resp.pendingInvites : 0);
             } catch (ApiClient.ApiException e) {
-                if (e.isNotFound() && worldId.equals(PoiConfig.get().currentWorldId)) {
-                    // Removed from the world, or it was deleted
-                    Minecraft.getInstance().execute(() -> {
-                        PoiConfig.get().bindWorld(PoiCommand.getPlaceKey(), null);
-                        PoiCommand.switchWorld(null);
-                    });
-                    chat("§e[POI] You no longer have access to " + selectedWorldName(worldId)
-                            + ". Run /world list to pick another world.§r");
+                if (e.isBusy() || e.status == 0) {
+                    // Busy or unreachable: wait as told, or twice as long each time
+                    backoffSeconds = e.retryAfterSeconds > 0 ? e.retryAfterSeconds
+                            : Math.max(pollSeconds, backoffSeconds) * 2;
+                    next = clampSeconds(backoffSeconds);
+                } else if (e.isNotFound() && worldId != null) {
+                    onWorldNotFound(worldId);
+                } else if (e.status == 426) {
+                    next = MAX_POLL_SECONDS; // outdated build; commands show the update message
                 }
             } catch (Exception ignored) {
                 // Try again next time
             } finally {
-                revInFlight.set(false);
+                scheduleIn(next);
+                pollInFlight.set(false);
             }
         });
     }
 
-    private static void checkInvites() {
-        if (!invitesInFlight.compareAndSet(false, true)) return;
-        CompletableFuture.runAsync(() -> {
-            try {
-                for (ApiModels.PendingInvite inv : new ApiClient().getPendingInvites()) {
-                    if (announced.add(inv.id)) announce(inv);
-                }
-            } catch (Exception ignored) {
-                // Not linked yet, or offline: nothing to show
-            } finally {
-                invitesInFlight.set(false);
+    /** Reloads the selected world's POIs when someone else changed it. */
+    private static void onWorldRev(String worldId, Long rev) {
+        if (worldId == null || rev == null || !worldId.equals(PoiConfig.get().currentWorldId)) return;
+        if (worldId.equals(revWorldId) && rev != lastRev) PoiCommand.refreshPoiListAsync(worldId);
+        revWorldId = worldId;
+        lastRev = rev;
+    }
+
+    /**
+     * Not found twice in a row: the player was removed from the world, or it was deleted.
+     * Deselect it but keep this server's binding, so a world that comes back (or a blip
+     * on the site) doesn't cost them a /world select.
+     */
+    private static void onWorldNotFound(String worldId) {
+        if (++notFoundInARow < NOT_FOUND_BEFORE_DESELECT || !worldId.equals(PoiConfig.get().currentWorldId)) return;
+        notFoundInARow = 0;
+        String name = selectedWorldName(worldId);
+        Minecraft.getInstance().execute(() -> PoiCommand.switchWorld(null));
+        chat("§e[POI] You no longer have access to " + name + ". Run /world list to pick another world.§r");
+    }
+
+    /** Fetches and announces invites when the count goes up. */
+    private static void onPendingInvites(int count) {
+        int before = lastPendingInvites;
+        lastPendingInvites = count;
+        if (count == 0 || count <= before) return;
+        try {
+            for (ApiModels.PendingInvite inv : new ApiClient().getPendingInvites()) {
+                if (inv.id != null && announced.add(inv.id)) announce(inv);
             }
-        });
+        } catch (Exception ignored) {
+            lastPendingInvites = before; // try again on the next poll
+        }
     }
 }

@@ -77,8 +77,7 @@ Files use the same JSON format as the Reaching Random website's import/export fe
 1. Log in to [Reaching Random](https://reachingrandom.com), open the [POI Tracker](https://reachingrandom.com/mc/poi), click **Connect mod** and copy your API key (it starts with `mcpoi_`).
 2. In Minecraft:
 ```mcfunction
-/poi setkey <your-api-key>    # Saves key and switches to online mode
-/poi link                     # Links this Minecraft account (names you in shared worlds)
+/poi setkey <your-api-key>    # Saves key, links this Minecraft account, switches to online mode
 /world list                   # Lists your cloud worlds (auto-selects if seed matches)
 /poi add "My Base"            # Saves to the cloud immediately
 ```
@@ -104,7 +103,7 @@ The downloaded file is tied to your API key via a hash — you can switch betwee
 | `/poi status` | Show current storage mode, data file, and world selection |
 | `/poi offline` | Switch to offline storage (no API key needed) |
 | `/poi online` | Switch to online storage (requires API key) |
-| `/poi setkey <key>` | Save API key and switch to online mode |
+| `/poi setkey <key>` | Save API key, link this Minecraft account, and switch to online mode |
 | `/poi download <key>` | Download cloud data to a local file (key not persisted) |
 | `/poi reset` | Clear all config and switch back to offline mode |
 
@@ -128,7 +127,7 @@ Roles: **read-only** sees and tracks POIs and names campfires; **contribute** al
 | `/world invites` | List pending invites for the selected world, with **[Revoke]** (admin) |
 | `/world members` | List the selected world's members and roles |
 | `/world leave` | Leave a world someone shared with you |
-| `/poi link` | Link this Minecraft account to your Reaching Random account. Run it once per account |
+| `/poi link` | Link this Minecraft account now and show any error. `/poi setkey` and joining a world already try this quietly |
 | `/poi unlink` | Unlink this Minecraft account |
 
 Invites sent to a linked account show up in chat with **[Accept]** and **[Decline]**. When an admin selects a shared world on a server, other members' mods select it automatically when they join that server (`autoSelectSharedWorlds` in the config, on by default).

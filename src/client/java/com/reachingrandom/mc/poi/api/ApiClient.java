@@ -141,8 +141,10 @@ public class ApiClient {
 
     // ── Sharing ────────────────────────────────────────────────────────────────
 
-    public long getRev(String worldId) throws ApiException {
-        return GSON.fromJson(get("/api/mc/poi/worlds/" + worldId + "/rev"), ApiModels.RevResponse.class).rev;
+    /** The background check: the selected world's revision (if any), waiting invites, and when to ask again. */
+    public ApiModels.PollResponse poll(String worldId) throws ApiException {
+        String path = "/api/mc/poi/poll" + (worldId != null ? "?worldId=" + enc(worldId) : "");
+        return GSON.fromJson(get(path), ApiModels.PollResponse.class);
     }
 
     public void setServerAddress(String worldId, String serverAddress) throws ApiException {
@@ -150,7 +152,7 @@ public class ApiClient {
     }
 
     public List<ApiModels.Member> getMembers(String worldId) throws ApiException {
-        return GSON.fromJson(get("/api/mc/poi/worlds/" + worldId + "/members"), ApiModels.MembersResponse.class).members;
+        return orEmpty(GSON.fromJson(get("/api/mc/poi/worlds/" + worldId + "/members"), ApiModels.MembersResponse.class).members);
     }
 
     public void leaveWorld(String worldId) throws ApiException {
@@ -159,11 +161,11 @@ public class ApiClient {
 
     public List<ApiModels.InviteResult> invitePlayers(String worldId, String role, List<ApiModels.Player> players) throws ApiException {
         String body = GSON.toJson(new ApiModels.InvitePlayersRequest(role, players));
-        return GSON.fromJson(post("/api/mc/poi/worlds/" + worldId + "/invites", body), ApiModels.InvitePlayersResponse.class).results;
+        return orEmpty(GSON.fromJson(post("/api/mc/poi/worlds/" + worldId + "/invites", body), ApiModels.InvitePlayersResponse.class).results);
     }
 
     public List<ApiModels.Invite> getInvites(String worldId) throws ApiException {
-        return GSON.fromJson(get("/api/mc/poi/worlds/" + worldId + "/invites"), ApiModels.InvitesResponse.class).invites;
+        return orEmpty(GSON.fromJson(get("/api/mc/poi/worlds/" + worldId + "/invites"), ApiModels.InvitesResponse.class).invites);
     }
 
     public void revokeInvite(String worldId, String inviteId) throws ApiException {
@@ -171,7 +173,7 @@ public class ApiClient {
     }
 
     public List<ApiModels.PendingInvite> getPendingInvites() throws ApiException {
-        return GSON.fromJson(get("/api/mc/poi/invites"), ApiModels.PendingInvitesResponse.class).invites;
+        return orEmpty(GSON.fromJson(get("/api/mc/poi/invites"), ApiModels.PendingInvitesResponse.class).invites);
     }
 
     /** Accepts or declines an invite sent to you; returns the world's id. */
@@ -192,11 +194,16 @@ public class ApiClient {
     }
 
     public List<ApiModels.LinkedAccount> getLinkedAccounts() throws ApiException {
-        return GSON.fromJson(get("/api/mc/poi/link"), ApiModels.LinkedAccountsResponse.class).accounts;
+        return orEmpty(GSON.fromJson(get("/api/mc/poi/link"), ApiModels.LinkedAccountsResponse.class).accounts);
     }
 
     public void unlink(String uuid) throws ApiException {
         delete("/api/mc/poi/link/" + uuid);
+    }
+
+    /** A missing list in a response reads as empty, so a newer site can't break older builds. */
+    private static <T> List<T> orEmpty(List<T> list) {
+        return list != null ? list : List.of();
     }
 
     private static String enc(String value) {
@@ -287,13 +294,23 @@ public class ApiClient {
 
         int status = resp.statusCode();
         if (status >= 200 && status < 300) return resp.body();
+        int retryAfter = resp.headers().firstValue("Retry-After").map(ApiClient::parseSeconds).orElse(0);
         if (status == 401) {
-            throw new ApiException("Unauthorized — check your API key with /poi setkey", status);
+            throw new ApiException("Unauthorized — check your API key with /poi setkey", status, retryAfter);
         }
         // The site explains most refusals (a role that can't do this, an expired invite, ...)
         String message = serverMessage(resp.body());
-        if (message != null) throw new ApiException(message, status);
-        throw new ApiException(status == 404 ? "Not found (404)" : "Server returned HTTP " + status, status);
+        if (message != null) throw new ApiException(message, status, retryAfter);
+        throw new ApiException(status == 404 ? "Not found (404)" : "Server returned HTTP " + status, status, retryAfter);
+    }
+
+    /** Retry-After in seconds; the HTTP-date form is rare enough to treat as "not given". */
+    private static int parseSeconds(String value) {
+        try {
+            return Math.max(0, Integer.parseInt(value.trim()));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     private static String serverMessage(String body) {
@@ -310,15 +327,25 @@ public class ApiClient {
     public static class ApiException extends Exception {
         /** The HTTP status, or 0 when the request never got an answer. */
         public final int status;
+        /** Seconds the server asked us to wait (Retry-After), or 0. */
+        public final int retryAfterSeconds;
 
         public ApiException(String message) {
-            this(message, 0);
+            this(message, 0, 0);
         }
 
         public ApiException(String message, int status) {
+            this(message, status, 0);
+        }
+
+        public ApiException(String message, int status, int retryAfterSeconds) {
             super(message);
             this.status = status;
+            this.retryAfterSeconds = retryAfterSeconds;
         }
+
+        /** Too many requests, or the site is struggling: slow down. */
+        public boolean isBusy() { return status == 429 || status == 503; }
 
         public boolean isForbidden() { return status == 403; }
         public boolean isNotFound()  { return status == 404; }

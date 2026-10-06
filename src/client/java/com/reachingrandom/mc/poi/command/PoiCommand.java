@@ -299,7 +299,7 @@ public final class PoiCommand {
         send(source, gray("  /poi offline              ") + "Switch to offline storage");
         send(source, gray("  /poi online               ") + "Switch to online storage (requires API key)");
         send(source, gray("  /poi off                  ") + "Disable Points of Interest (hides arrows, blocks commands)");
-        send(source, gray("  /poi setkey <key>         ") + "Save API key and switch to online mode");
+        send(source, gray("  /poi setkey <key>         ") + "Save API key, link this account, switch to online");
         send(source, gray("  /poi reset                ") + "Remove API key and return to offline mode");
         send(source, gray("  /poi download <key>       ") + "Download cloud data to local file");
         send(source, gray("  /poi list [page]          ") + "List POIs in current dimension");
@@ -313,7 +313,7 @@ public final class PoiCommand {
         send(source, gray("  /poi untrack <#> [# ...]  ") + "Untrack one or more POIs");
         send(source, gray("  /poi track clear          ") + "Stop tracking all POIs");
         send(source, gray("  /poi campfires [on|off]   ") + "Name campfires to save them as Campsites");
-        send(source, gray("  /poi link                 ") + "Link this Minecraft account (names you in shared worlds)");
+        send(source, gray("  /poi link                 ") + "Link this account now, showing any error (setkey tries too)");
         send(source, gray("  /poi unlink               ") + "Unlink this Minecraft account");
         send(source, "");
         send(source, gray("  /pois             ") + "Shortcut for /poi list (current dimension)");
@@ -454,6 +454,8 @@ public final class PoiCommand {
         cfg.storageMode    = "online";
         cfg.save();
         send(source, ok("API key saved. Switched to ONLINE mode."));
+        // Links this Minecraft account too, silently: a stale session just waits for a later join
+        SharingCommands.autoLink();
 
         // Show offline data file for reference (data is never lost on mode switch)
         Path offlineFile = PoiStorageProvider.resolveDataFile(cfg);
@@ -689,6 +691,7 @@ public final class PoiCommand {
         PoiConfig cfg = PoiConfig.get();
         String legacyId = cfg.takeLegacyWorldId();
         String place = getPlaceKey();
+        String legacyPlace = legacyPlaceKey();
         String seed  = getCurrentSeed();
 
         switchWorld(null);
@@ -706,6 +709,12 @@ public final class PoiCommand {
             if (worldEpoch.get() != epoch) return;
             PoiSession.get().setKnownWorlds(worlds);
 
+            if (cfg.getBinding(place) == null && legacyPlace != null && cfg.getBinding(legacyPlace) != null) {
+                // Saved before server addresses were normalized: move it to the new key
+                String movedId = cfg.getBinding(legacyPlace);
+                cfg.bindWorld(legacyPlace, null);
+                cfg.bindWorld(place, movedId);
+            }
             String boundId = cfg.getBinding(place);
             ApiModels.WorldSummary bound = boundId == null ? null : worlds.stream()
                     .filter(w -> boundId.equals(w.id))
@@ -719,7 +728,8 @@ public final class PoiCommand {
             // A world shared with you that an admin bound to this server
             List<ApiModels.WorldSummary> onThisServer = place == null || !place.startsWith("mp:") || !cfg.autoSelectSharedWorlds
                     ? List.of()
-                    : worlds.stream().filter(w -> place.substring(3).equals(w.serverAddress)).toList();
+                    : worlds.stream().filter(w -> w.serverAddress != null
+                            && place.substring(3).equals(normalizeAddress(w.serverAddress))).toList();
             if (onThisServer.size() == 1) {
                 ApiModels.WorldSummary shared = onThisServer.get(0);
                 cfg.bindWorld(place, shared.id);
@@ -1508,7 +1518,30 @@ public final class PoiCommand {
         // Realms and LAN addresses change between sessions; their names don't
         if (server.isRealm()) return "realm:" + server.name;
         if (server.isLan())   return "lan:" + server.name;
-        return server.ip != null ? "mp:" + server.ip.toLowerCase(Locale.ROOT) : null;
+        return server.ip != null ? "mp:" + normalizeAddress(server.ip) : null;
+    }
+
+    /**
+     * The place key from before addresses were normalized ({@code mp:} + the address as typed,
+     * lowercased), so bindings saved under it carry over. Null when it's the same key.
+     */
+    static String legacyPlaceKey() {
+        Minecraft mc = Minecraft.getInstance();
+        ServerData server = mc.hasSingleplayerServer() ? null : mc.getCurrentServer();
+        if (server == null || server.isRealm() || server.isLan() || server.ip == null) return null;
+        String legacy = "mp:" + server.ip.toLowerCase(Locale.ROOT);
+        return legacy.equals(getPlaceKey()) ? null : legacy;
+    }
+
+    /**
+     * One spelling per server, so members whose server lists say {@code Play.Example.com},
+     * {@code play.example.com:25565} or {@code play.example.com.} all match the same world.
+     */
+    static String normalizeAddress(String address) {
+        String a = address.trim().toLowerCase(Locale.ROOT);
+        if (a.endsWith(":25565")) a = a.substring(0, a.length() - ":25565".length());
+        while (a.endsWith(".")) a = a.substring(0, a.length() - 1);
+        return a;
     }
 
     private static String getWorldName() {
