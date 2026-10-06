@@ -211,8 +211,12 @@ public final class ApiModels {
     }
 
     // ── Sharing ───────────────────────────────────────────────────────────────
-    public static class RevResponse {
-        public long rev;
+    /** GET /api/mc/poi/poll. Fields may be missing; see SharingCommands for the defaults. */
+    public static class PollResponse {
+        public Long rev;
+        public Boolean shared;
+        public Integer pendingInvites;
+        public Integer pollSeconds;
     }
 
     public static class ServerAddressRequest {
