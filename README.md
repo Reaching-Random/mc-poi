@@ -1,6 +1,6 @@
 # Points of Interest — Minecraft Fabric Mod
 
-[![Minecraft Version](https://img.shields.io/badge/Minecraft-26.1-blue.svg)](https://www.minecraft.net/)
+[![Minecraft Version](https://img.shields.io/badge/Minecraft-26.2-blue.svg)](https://www.minecraft.net/)
 [![Fabric API](https://img.shields.io/badge/Fabric-0.18.5-green.svg)](https://fabricmc.net/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -28,7 +28,7 @@
 
 ## Installation
 
-1. Ensure you have **Fabric Loader** installed for Minecraft **26.1**.
+1. Ensure you have **Fabric Loader** installed for Minecraft **26.2**.
 2. Download the latest `points-of-interest-*.jar` from the [Releases](https://github.com/Reaching-Random/mc-poi/releases) page.
 3. Place the JAR file in your Minecraft `mods/` folder.
 4. Install the **Fabric API** mod. It is required; the mod will not load without it.
