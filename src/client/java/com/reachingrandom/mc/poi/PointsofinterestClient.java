@@ -3,7 +3,9 @@ package com.reachingrandom.mc.poi;
 import com.reachingrandom.mc.poi.campsite.CampsiteTracker;
 import com.reachingrandom.mc.poi.command.PoiCommand;
 import com.reachingrandom.mc.poi.command.SharingCommands;
+import com.reachingrandom.mc.poi.gui.PoiScreen;
 import com.reachingrandom.mc.poi.render.PoiDirectionRenderer;
+import com.reachingrandom.mc.poi.render.PoiHud;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
@@ -16,11 +18,17 @@ public class PointsofinterestClient implements ClientModInitializer {
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
 				PoiCommand.register(dispatcher));
 
-		// World-space direction indicator for tracked POIs
+		// Floating in-world labels (name and distance) for tracked POIs
 		LevelRenderEvents.BEFORE_GIZMOS.register(PoiDirectionRenderer::render);
+
+		// Corner overlay: position, dimension and current group (/poi hud)
+		PoiHud.register();
 
 		// Name campfires to save them as POIs in the "Campsites" group
 		CampsiteTracker.register();
+
+		// POI list screen: the I key or /poi menu
+		PoiScreen.register();
 
 		// Shared worlds: reload when someone else changes the selected world, and show
 		// invites sent to this account

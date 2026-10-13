@@ -69,6 +69,11 @@ public class PoiConfig {
     /** Whether placed/right-clicked campfires can be named into the "Campsites" group. */
     public boolean campfireCampsites = true;
 
+    /** The corner overlay with your position and the current group. Off until turned on. */
+    public boolean hudEnabled = false;
+    /** "left" or "right": the top corner the overlay sits in. */
+    public String hudCorner = "left";
+
     /**
      * Storage mode: {@code "online"} (uses the reaching-random API) or
      * {@code "offline"} (uses a local JSON file in AppState format).

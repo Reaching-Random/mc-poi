@@ -65,6 +65,27 @@ public class ApiPoiStorage implements PoiStorage {
         apiClient.deletePoi(worldId, poiId);
     }
 
+    @Override
+    public ApiModels.WorldItem movePoi(String worldId, String poiId, double x, double y, double z,
+                                       String dimension) throws ApiClient.ApiException {
+        return apiClient.movePoi(worldId, poiId, x, y, z, dimension);
+    }
+
+    @Override
+    public ApiModels.WorldItem setPoiGroup(String worldId, String poiId, String groupId) throws ApiClient.ApiException {
+        return apiClient.setPoiGroup(worldId, poiId, groupId);
+    }
+
+    @Override
+    public ApiModels.WorldItem renameGroup(String worldId, String groupId, String name) throws ApiClient.ApiException {
+        return apiClient.renameGroup(worldId, groupId, name);
+    }
+
+    @Override
+    public void deleteGroup(String worldId, String groupId) throws ApiClient.ApiException {
+        apiClient.deleteGroup(worldId, groupId);
+    }
+
     // ── Campsites ─────────────────────────────────────────────────────────────
 
     @Override

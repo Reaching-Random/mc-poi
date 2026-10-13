@@ -140,6 +140,15 @@ public final class PoiSession {
         return removed ? poi : null;
     }
 
+    /** Removes a POI from the tracked set (by ID when it has one). */
+    public void removeTrackedPoi(ApiModels.WorldItem poi) {
+        if (poi.id != null) {
+            trackedPois.removeIf(p -> poi.id.equals(p.id));
+        } else {
+            trackedPois.remove(poi);
+        }
+    }
+
     /**
      * Removes a tracked POI by its ID. Used after deletion so the direction
      * renderer stops referencing a POI that no longer exists.
