@@ -35,6 +35,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -117,6 +118,20 @@ public final class SharingCommands {
             if (profile.name().toLowerCase(Locale.ROOT).startsWith(prefix)) last.suggest(profile.name());
         }
         return last.buildFuture();
+    }
+
+    /** Other players in the server's tab list (not you), for picking who to invite. */
+    public static List<GameProfile> otherOnlinePlayers() {
+        java.util.UUID me = Minecraft.getInstance().getUser().getProfileId();
+        return onlineProfiles().values().stream()
+                .filter(p -> !p.id().equals(me))
+                .sorted(java.util.Comparator.comparing(p -> p.name().toLowerCase(Locale.ROOT)))
+                .toList();
+    }
+
+    /** Whether the last background check found invites waiting for this account. */
+    public static boolean hasPendingInvites() {
+        return lastPendingInvites > 0;
     }
 
     /** Players in the server's tab list, by lowercase name. */
@@ -320,16 +335,25 @@ public final class SharingCommands {
             sendComponent(source, ask);
             return 1;
         }
-        String place = PoiCommand.getPlaceKey();
         async(source, () -> {
-            client.leaveWorld(worldId);
-            Minecraft.getInstance().execute(() -> {
-                PoiConfig.get().bindWorld(place, null);
-                PoiCommand.switchWorld(null);
-            });
+            leave(client, worldId);
             send(source, ok("You left " + worldName + "."));
         });
         return 1;
+    }
+
+    /**
+     * Leaves a shared world. If it's the one selected here, deselects it and clears this
+     * place's binding. Blocks, so call it off the game thread.
+     */
+    public static void leave(ApiClient client, String worldId) throws Exception {
+        String place = PoiCommand.getPlaceKey();
+        client.leaveWorld(worldId);
+        Minecraft.getInstance().execute(() -> {
+            PoiConfig cfg = PoiConfig.get();
+            if (place != null && worldId.equals(cfg.getBinding(place))) cfg.bindWorld(place, null);
+            if (worldId.equals(cfg.currentWorldId)) PoiCommand.switchWorld(null);
+        });
     }
 
     // ── /poi link, /poi unlink ────────────────────────────────────────────────
@@ -386,12 +410,12 @@ public final class SharingCommands {
      * been open for days) just leaves it for the next join after a restart. {@code /poi link}
      * is the version that reports errors.
      */
-    public static void autoLink() {
+    public static CompletableFuture<Void> autoLink() {
         PoiConfig cfg = PoiConfig.get();
-        if (!cfg.isOnlineMode() || !cfg.hasApiKey()) return;
+        if (!cfg.isOnlineMode() || !cfg.hasApiKey()) return CompletableFuture.completedFuture(null);
         java.util.UUID me = Minecraft.getInstance().getUser().getProfileId();
-        if (me == null || me.equals(linkedProfile)) return;
-        CompletableFuture.runAsync(() -> {
+        if (me == null || me.equals(linkedProfile)) return CompletableFuture.completedFuture(null);
+        return CompletableFuture.runAsync(() -> {
             try {
                 ApiClient client = new ApiClient();
                 boolean linked = client.getLinkedAccounts().stream().anyMatch(a -> me.toString().equals(a.uuid));
@@ -402,6 +426,46 @@ public final class SharingCommands {
                 linkedProfile = me;
             } catch (Exception e) {
                 Pointsofinterest.LOGGER.debug("[POI] Automatic account link didn't happen: {}", e.getMessage());
+            }
+        });
+    }
+
+    /** This Minecraft account's link to the site account, or null if it isn't linked. Online mode only. */
+    public static CompletableFuture<ApiModels.LinkedAccount> findLinkedAccount() {
+        String me = Minecraft.getInstance().getUser().getProfileId().toString();
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return new ApiClient().getLinkedAccounts().stream()
+                        .filter(a -> me.equals(a.uuid)).findFirst().orElse(null);
+            } catch (ApiClient.ApiException e) {
+                throw new CompletionException(e);
+            }
+        });
+    }
+
+    /** Links this Minecraft account, as /poi link does. Fails if Mojang refuses the session. */
+    public static CompletableFuture<ApiModels.LinkedAccount> link() {
+        java.util.UUID me = Minecraft.getInstance().getUser().getProfileId();
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                ApiModels.LinkedAccount account = linkNow(new ApiClient());
+                linkedProfile = me;
+                return account;
+            } catch (Exception e) {
+                throw new CompletionException(e);
+            }
+        });
+    }
+
+    /** Unlinks this Minecraft account, as /poi unlink does. */
+    public static CompletableFuture<Void> unlink() {
+        String me = Minecraft.getInstance().getUser().getProfileId().toString();
+        return CompletableFuture.runAsync(() -> {
+            try {
+                new ApiClient().unlink(me);
+                linkedProfile = null;
+            } catch (ApiClient.ApiException e) {
+                throw new CompletionException(e);
             }
         });
     }
@@ -444,30 +508,45 @@ public final class SharingCommands {
         if (client == null) return 0;
         String place = PoiCommand.getPlaceKey();
         async(source, () -> {
-            String worldId = client.respondToInvite(inviteId, accept);
-            announced.remove(inviteId);
-            if (!accept) {
+            Joined joined = respond(client, inviteId, accept, place);
+            if (joined == null) {
                 send(source, gray("Invite declined."));
-                return;
-            }
-            List<ApiModels.WorldSummary> worlds = PoiStorageProvider.get().listWorlds();
-            PoiSession.get().setKnownWorlds(worlds);
-            ApiModels.WorldSummary world = PoiSession.get().knownWorld(worldId);
-            String name = world != null ? world.name : "the world";
-            PoiConfig cfg = PoiConfig.get();
-            boolean playsHere = world != null && world.serverAddress != null && place != null
-                    && place.equals("mp:" + PoiCommand.normalizeAddress(world.serverAddress));
-            if (place != null && (playsHere || cfg.getBinding(place) == null)) {
-                Minecraft.getInstance().execute(() -> {
-                    cfg.bindWorld(place, worldId);
-                    PoiCommand.switchWorld(worldId);
-                });
-                send(source, ok("Joined " + name + ". It's now selected here."));
+            } else if (joined.selectedHere) {
+                send(source, ok("Joined " + joined.name + ". It's now selected here."));
             } else {
-                send(source, ok("Joined " + name + ". Run /world list to select it."));
+                send(source, ok("Joined " + joined.name + ". Run /world list to select it."));
             }
         });
         return 1;
+    }
+
+    /** The world an accepted invite joined, and whether it became the selected world here. */
+    public record Joined(String worldId, String name, boolean selectedHere) {}
+
+    /**
+     * Accepts or declines an invite. An accepted world is selected here when it's played
+     * on this server, or when nothing is selected for this place yet. Null when declined.
+     * Blocks, so call it off the game thread.
+     */
+    public static Joined respond(ApiClient client, String inviteId, boolean accept, String place) throws Exception {
+        String worldId = client.respondToInvite(inviteId, accept);
+        announced.remove(inviteId);
+        if (!accept) return null;
+        List<ApiModels.WorldSummary> worlds = PoiStorageProvider.get().listWorlds();
+        PoiSession.get().setKnownWorlds(worlds);
+        ApiModels.WorldSummary world = PoiSession.get().knownWorld(worldId);
+        String name = world != null ? world.name : "the world";
+        PoiConfig cfg = PoiConfig.get();
+        boolean playsHere = world != null && world.serverAddress != null && place != null
+                && place.equals("mp:" + PoiCommand.normalizeAddress(world.serverAddress));
+        boolean selectHere = place != null && (playsHere || cfg.getBinding(place) == null);
+        if (selectHere) {
+            Minecraft.getInstance().execute(() -> {
+                cfg.bindWorld(place, worldId);
+                PoiCommand.switchWorld(worldId);
+            });
+        }
+        return new Joined(worldId, name, selectHere);
     }
 
     // ── Background checks ─────────────────────────────────────────────────────

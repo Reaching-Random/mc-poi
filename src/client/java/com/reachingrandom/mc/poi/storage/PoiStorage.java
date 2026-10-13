@@ -50,6 +50,18 @@ public interface PoiStorage {
 
     ApiModels.WorldItem createGroup(String worldId, String name) throws ApiClient.ApiException;
 
+    /** Moves a POI to a new position, possibly in another dimension. Not for campsites. */
+    ApiModels.WorldItem movePoi(String worldId, String poiId, double x, double y, double z,
+                                String dimension) throws ApiClient.ApiException;
+
+    /** Puts a POI in another group, or at the root for a {@code null} group. Not for campsites. */
+    ApiModels.WorldItem setPoiGroup(String worldId, String poiId, String groupId) throws ApiClient.ApiException;
+
+    ApiModels.WorldItem renameGroup(String worldId, String groupId, String name) throws ApiClient.ApiException;
+
+    /** Deletes a group. Its POIs move to the root, where the group was; none are deleted. */
+    void deleteGroup(String worldId, String groupId) throws ApiClient.ApiException;
+
     /**
      * Permanently deletes the POI with the given ID from the specified world.
      * Throws {@link ApiClient.ApiException} if the POI or world is not found.

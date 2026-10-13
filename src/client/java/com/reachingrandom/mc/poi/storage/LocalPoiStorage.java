@@ -265,6 +265,107 @@ public class LocalPoiStorage implements PoiStorage {
             "World not found: " + worldId + ". Run /world list to refresh.");
     }
 
+    @Override
+    public ApiModels.WorldItem movePoi(String worldId, String poiId, double x, double y, double z,
+                                       String dimension) throws ApiClient.ApiException {
+        ApiModels.AppState state = loadAppState();
+        ApiModels.WorldDetail world = requireWorld(state, worldId);
+        Located found = locate(world, poiId);
+        ApiModels.WorldItem poi = found.poi;
+        if (poi.coords == null) poi.coords = new ApiModels.Coords();
+        poi.coords.x = x;
+        poi.coords.y = y;
+        poi.coords.z = z;
+        poi.dimension = dimension;
+        touch(world, found);
+        saveAppState(state);
+        return poi;
+    }
+
+    @Override
+    public ApiModels.WorldItem setPoiGroup(String worldId, String poiId, String groupId) throws ApiClient.ApiException {
+        ApiModels.AppState state = loadAppState();
+        ApiModels.WorldDetail world = requireWorld(state, worldId);
+        Located found = locate(world, poiId);
+        ApiModels.WorldItem target = groupId == null ? null : findGroup(world, groupId);
+        if (groupId != null && target == null) throw new ApiClient.ApiException("Group not found: " + groupId);
+
+        // Like the site: out of where it was, onto the end of the group (or the root)
+        if (found.parent != null) found.parent.items.remove(found.poi);
+        else world.items.remove(found.poi);
+        String ts = now();
+        if (target == null) {
+            ensureItems(world).add(found.poi);
+        } else {
+            if (target.items == null) target.items = new ArrayList<>();
+            target.items.add(found.poi);
+            target.modified = ts;
+        }
+        found.poi.modified = ts;
+        if (found.parent != null) found.parent.modified = ts;
+        world.modified = ts;
+        saveAppState(state);
+        return found.poi;
+    }
+
+    @Override
+    public ApiModels.WorldItem renameGroup(String worldId, String groupId, String name) throws ApiClient.ApiException {
+        ApiModels.AppState state = loadAppState();
+        ApiModels.WorldDetail world = requireWorld(state, worldId);
+        ApiModels.WorldItem group = findGroup(world, groupId);
+        if (group == null) throw new ApiClient.ApiException("Group not found: " + groupId);
+        group.name = name;
+        group.modified = now();
+        world.modified = group.modified;
+        saveAppState(state);
+        return group;
+    }
+
+    @Override
+    public void deleteGroup(String worldId, String groupId) throws ApiClient.ApiException {
+        ApiModels.AppState state = loadAppState();
+        ApiModels.WorldDetail world = requireWorld(state, worldId);
+        ApiModels.WorldItem group = findGroup(world, groupId);
+        if (group == null) throw new ApiClient.ApiException("Group not found: " + groupId);
+        int at = world.items.indexOf(group);
+        world.items.remove(at);
+        if (group.items != null) world.items.addAll(at, group.items);
+        world.modified = now();
+        saveAppState(state);
+    }
+
+    /** A POI and the group it's in (null at the root). */
+    private record Located(ApiModels.WorldItem poi, ApiModels.WorldItem parent) {}
+
+    private Located locate(ApiModels.WorldDetail world, String poiId) throws ApiClient.ApiException {
+        if (world.items != null) {
+            for (ApiModels.WorldItem item : world.items) {
+                if ("poi".equals(item.type) && poiId.equals(item.id)) return new Located(item, null);
+                if ("group".equals(item.type) && item.items != null) {
+                    for (ApiModels.WorldItem child : item.items) {
+                        if (poiId.equals(child.id)) return new Located(child, item);
+                    }
+                }
+            }
+        }
+        throw new ApiClient.ApiException("POI not found: " + poiId);
+    }
+
+    private ApiModels.WorldItem findGroup(ApiModels.WorldDetail world, String groupId) {
+        if (world.items == null) return null;
+        for (ApiModels.WorldItem item : world.items) {
+            if ("group".equals(item.type) && groupId.equals(item.id)) return item;
+        }
+        return null;
+    }
+
+    private void touch(ApiModels.WorldDetail world, Located found) {
+        String ts = now();
+        found.poi.modified = ts;
+        if (found.parent != null) found.parent.modified = ts;
+        world.modified = ts;
+    }
+
     /** Tries to add {@code poi} into the group with the given ID. Returns true on success. */
     private boolean addToGroup(ApiModels.WorldDetail world, String groupId, ApiModels.WorldItem poi) {
         if (world.items == null) return false;
