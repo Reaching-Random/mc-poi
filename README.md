@@ -10,15 +10,17 @@
 
 ## Features
 
+- **In-game screen** — Press **I** (or run `/poi menu`) for tabs to browse, track, add, edit and move POIs, manage groups, pick and share worlds, answer invites, and change settings, without typing commands.
 - **Offline by default** — No account required. POIs are stored locally in a JSON file compatible with the Reaching Random website's import/export format.
 - **Cloud sync** — Connect your Reaching Random account to sync POIs across devices and view them on the website.
 - **Shared worlds** — Share a world with everyone on your server, each with a role (read-only, contribute, admin, owner), from the [POI Tracker](https://reachingrandom.com/mc/poi) or with `/world share`. Changes from other players show up within 30 seconds.
 - **Download snapshot** — Fetch your cloud data to a local file with `/poi download` for offline access or backup.
-- **Multi-World & Groups** — Organize POIs by world and nested groups (categories).
+- **Multi-World & Groups** — Organize POIs by world, and into groups like Farms or Portals. Deleting a group never deletes its POIs; they move to Ungrouped.
 - **Per-World Selection** — Each singleplayer world and each server remembers its own POI world, tracked POIs and group. Singleplayer worlds are matched by seed automatically; on a server (where the seed is hidden) you pick the world once and it sticks.
 - **Dimension Support** — Tracks whether a POI is in the Overworld, Nether, or The End.
-- **Multi-POI Tracking** — Track multiple POIs simultaneously, each with its own 3D direction indicator.
+- **Multi-POI Tracking** — Track multiple POIs simultaneously, each with its own floating label in the world showing the POI's name and distance, placed in its direction.
 - **Campsites** — Name a campfire when you place it (or right-click it with an empty hand) and it becomes a POI in the "Campsites" group. Breaking the campfire removes the POI.
+- **HUD** — An optional corner overlay (top left or right) with your position and the group new POIs go into. Turn it on with `/poi hud on` or in Settings.
 - **Find** — `/poi find <text>` lists every POI whose name or description contains the text, nearest first, with the closest one marked.
 - **Schema-validated storage** — Local data files are validated against a versioned JSON schema on load to catch corruption early.
 
@@ -67,7 +69,7 @@ Files use the same JSON format as the Reaching Random website's import/export fe
 /world add                    # Create a world entry (uses current world name + seed)
 /poi add Diamond Vein         # Save your current position as a POI
 /poi list                     # List POIs in the current dimension
-/poi track 1                  # Show a 3D direction arrow to POI #1
+/poi track 1                  # Show a floating label for POI #1 (name and distance)
 ```
 
 ---
@@ -94,6 +96,19 @@ The downloaded file is tied to your API key via a hash — you can switch betwee
 
 ---
 
+## The POI screen
+
+Press **I** (change the key under Controls → Key Binds → Points of Interest), or run `/poi menu`. Press **I** again or Esc to close it.
+
+- **POIs** — Every POI in the selected world, with a sidebar of groups (plus **All**, **Tracked** and **Ungrouped**), a dimension filter and a search box. Tick a checkbox to track a POI; click the rest of the row to open the editor. The group you open is also where new POIs go, the same as `/group select`.
+  - **Add POI here…** opens the editor for a new POI at your position, in the open group.
+  - **+ New** creates a group; **Edit…** renames or deletes the open group.
+  - The editor changes the name, description, group and position (typed in, or **Use current position**), or deletes the POI. Campsites can only be renamed or removed. Read-only members can look but not change.
+- **World** — Your POI worlds. **Use this world** switches to one (just clicking a world only shows it), and **New world…** creates one. For shared worlds: members, inviting players on this server, pending invites with **Revoke**, and **Leave…**. Invites to you show at the bottom with **Accept** and **Decline**, and an ✉ on the tab title.
+- **Settings** — Storage mode (Offline, Online, Off), your API key, account link, campfire campsites, the HUD and auto-selecting shared worlds.
+
+---
+
 ## Commands
 
 ### Storage & Setup
@@ -105,7 +120,7 @@ The downloaded file is tied to your API key via a hash — you can switch betwee
 | `/poi online` | Switch to online storage (requires API key) |
 | `/poi setkey <key>` | Save API key, link this Minecraft account, and switch to online mode |
 | `/poi download <key>` | Download cloud data to a local file (key not persisted) |
-| `/poi reset` | Clear all config and switch back to offline mode |
+| `/poi reset` | Remove the API key and switch back to offline mode (local data is kept) |
 
 ### World Management
 
@@ -130,7 +145,7 @@ Roles: **read-only** sees and tracks POIs and names campfires; **contribute** al
 | `/poi link` | Link this Minecraft account now and show any error. `/poi setkey` and joining a world already try this quietly |
 | `/poi unlink` | Unlink this Minecraft account |
 
-Invites sent to a linked account show up in chat with **[Accept]** and **[Decline]**. When an admin selects a shared world on a server, other members' mods select it automatically when they join that server (`autoSelectSharedWorlds` in the config, on by default).
+Invites sent to a linked account show up in chat with **[Accept]** and **[Decline]**, and on the screen's World tab. When an admin selects a shared world on a server, other members' mods select it automatically when they join that server (**Auto-select shared worlds** in Settings, on by default).
 
 ### Group Management
 
@@ -138,15 +153,18 @@ Invites sent to a linked account show up in chat with **[Accept]** and **[Declin
 |---------|-------------|
 | `/group list [page]` | List groups in the current world |
 | `/group add <name>` | Create a new group and select it |
-| `/group select <#>` | Select a group (new POIs go here) |
-| `/group clear` | Deselect group (POIs added at root level) |
+| `/group select <#>` | Select a group (new POIs go here). Opening a group in the screen's sidebar does the same |
+| `/group clear` | Deselect the group (new POIs go to Ungrouped) |
+| `/group rename <#> <name>` | Rename a group |
+| `/group delete <#>` | Delete a group. Its POIs move to Ungrouped; none are deleted |
 | `/groups [page]` | Alias for `/group list` |
 
 ### POI Management
 
 | Command | Description |
 |---------|-------------|
-| `/poi add <name> [desc]` | Add a POI at your current location |
+| `/poi add <name> [desc]` | Add a POI where you're standing, in the current group if one is selected |
+| `/poi move <#>` | Move a POI to where you're standing (not campsites, which stay at their campfire) |
 | `/poi list [page]` | List POIs in your current dimension |
 | `/poi list all [page]` | List POIs across all dimensions |
 | `/poi list group <#> [page]` | List POIs in a specific group |
@@ -156,6 +174,8 @@ Invites sent to a linked account show up in chat with **[Accept]** and **[Declin
 | `/poi untrack <#> [# ...]` | Stop tracking one or more POIs |
 | `/poi track clear` | Stop tracking all POIs |
 | `/poi campfires [on\|off]` | Turn campfire campsites on or off (on by default) |
+| `/poi hud [on\|off\|left\|right]` | Show or hide the HUD, or pick its corner (off by default) |
+| `/poi menu` | Open the Points of Interest screen (same as the I key) |
 | `/poi help` | Show command help (includes current storage mode) |
 | `/pois [page]` | Alias for `/poi list` |
 | `/pois all [page]` | Alias for `/poi list all` |
@@ -175,9 +195,9 @@ Campfires can be saved as POIs, named much like a sign:
 
 A campsite is linked to its campfire by position: any POI in the Campsites group at the campfire's exact block coordinates (same dimension) belongs to it. Everything runs on your client, so it works on any server, and campsites land in the selected POI world.
 
-In a shared world the Campsites group is locked: POIs can't be added to it, moved in or out, or edited from the website or commands. Every member, read-only included, can name a campfire and remove a campsite by breaking it. Only the person who named a campsite, or an admin, can rename it or clear its name. A removed campsite can be restored by an admin on the website for 30 days.
+In a shared world the Campsites group is locked: POIs can't be added to it, moved in or out, or edited from the website, commands or the screen. Every member, read-only included, can name a campfire and remove a campsite by breaking it. Only the person who named a campsite, or an admin, can rename it or clear its name. A removed campsite can be restored by an admin on the website for 30 days.
 
-A POI is only removed automatically if the mod saw the campfire earlier in the same session and then saw it disappear. If a campfire is broken while you're logged out, delete its POI with `/poi delete`. Turn the feature off with `/poi campfires off`.
+A POI is only removed automatically if the mod saw the campfire earlier in the same session and then saw it disappear. If a campfire is broken while you're logged out, remove its POI with `/poi delete` or **Remove…** in the screen's editor. Turn the feature off with `/poi campfires off`.
 
 ---
 
