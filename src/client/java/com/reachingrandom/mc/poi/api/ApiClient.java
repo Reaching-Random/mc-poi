@@ -1,6 +1,8 @@
 package com.reachingrandom.mc.poi.api;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonNull;
+import com.google.gson.JsonObject;
 import com.reachingrandom.mc.poi.Pointsofinterest;
 import com.reachingrandom.mc.poi.config.PoiConfig;
 import net.fabricmc.loader.api.FabricLoader;
@@ -115,6 +117,38 @@ public class ApiClient {
 
     public void deletePoi(String worldId, String poiId) throws ApiException {
         delete("/api/mc/poi/worlds/" + worldId + "/pois/" + poiId);
+    }
+
+    public ApiModels.WorldItem movePoi(String worldId, String poiId, double x, double y, double z,
+                                       String dimension) throws ApiException {
+        JsonObject coords = new JsonObject();
+        coords.addProperty("x", x);
+        coords.addProperty("y", y);
+        coords.addProperty("z", z);
+        JsonObject body = new JsonObject();
+        body.add("coords", coords);
+        body.addProperty("dimension", dimension);
+        return GSON.fromJson(patch("/api/mc/poi/worlds/" + worldId + "/pois/" + poiId, body.toString()),
+                ApiModels.PoiResponse.class).poi;
+    }
+
+    /** A {@code null} group puts the POI at the root, so the null is sent rather than left out. */
+    public ApiModels.WorldItem setPoiGroup(String worldId, String poiId, String groupId) throws ApiException {
+        JsonObject body = new JsonObject();
+        if (groupId == null) body.add("groupId", JsonNull.INSTANCE);
+        else body.addProperty("groupId", groupId);
+        return GSON.fromJson(patch("/api/mc/poi/worlds/" + worldId + "/pois/" + poiId, body.toString()),
+                ApiModels.PoiResponse.class).poi;
+    }
+
+    public ApiModels.WorldItem renameGroup(String worldId, String groupId, String name) throws ApiException {
+        String body = GSON.toJson(new ApiModels.RenameRequest(name));
+        return GSON.fromJson(patch("/api/mc/poi/worlds/" + worldId + "/groups/" + groupId, body),
+                ApiModels.CreateGroupResponse.class).group;
+    }
+
+    public void deleteGroup(String worldId, String groupId) throws ApiException {
+        delete("/api/mc/poi/worlds/" + worldId + "/groups/" + groupId);
     }
 
     // ── Campsites ──────────────────────────────────────────────────────────────

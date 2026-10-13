@@ -7,6 +7,7 @@ import com.reachingrandom.mc.poi.api.ApiClient;
 import com.reachingrandom.mc.poi.api.ApiModels;
 import com.reachingrandom.mc.poi.campsite.CampsiteIndex;
 import com.reachingrandom.mc.poi.config.PoiConfig;
+import com.reachingrandom.mc.poi.gui.PoiScreen;
 import com.reachingrandom.mc.poi.storage.LocalPoiStorage;
 import com.reachingrandom.mc.poi.storage.PoiStorage;
 import com.reachingrandom.mc.poi.storage.PoiStorageProvider;
@@ -87,6 +88,10 @@ public final class PoiCommand {
                 .then(literal("help")
                     .executes(ctx -> executePoiHelp(ctx.getSource())))
 
+                // /poi menu
+                .then(literal("menu")
+                    .executes(ctx -> executeMenu(ctx.getSource())))
+
                 // /poi reset
                 .then(literal("reset")
                     .executes(ctx -> executeReset(ctx.getSource())))
@@ -153,6 +158,20 @@ public final class PoiCommand {
                                         getInteger(ctx, "group#"),
                                         getInteger(ctx, "page"), false))))))
 
+                // /poi move <#>
+                .then(literal("move")
+                    .then(argument("number", IntegerArgumentType.integer(1))
+                        .executes(ctx -> executeMove(ctx.getSource(),
+                                getInteger(ctx, "number")))))
+
+                // /poi hud [on|off|left|right]
+                .then(literal("hud")
+                    .executes(ctx -> executeHud(ctx.getSource(), null))
+                    .then(literal("on").executes(ctx -> executeHud(ctx.getSource(), "on")))
+                    .then(literal("off").executes(ctx -> executeHud(ctx.getSource(), "off")))
+                    .then(literal("left").executes(ctx -> executeHud(ctx.getSource(), "left")))
+                    .then(literal("right").executes(ctx -> executeHud(ctx.getSource(), "right"))))
+
                 // /poi delete <#>
                 .then(literal("delete")
                     .then(argument("number", IntegerArgumentType.integer(1))
@@ -206,6 +225,14 @@ public final class PoiCommand {
                 .then(literal("select")
                     .then(argument("number", IntegerArgumentType.integer(1))
                         .executes(ctx -> executeSelectGroup(ctx.getSource(), getInteger(ctx, "number")))))
+                .then(literal("rename")
+                    .then(argument("number", IntegerArgumentType.integer(1))
+                        .then(argument("name", StringArgumentType.greedyString())
+                            .executes(ctx -> executeRenameGroup(ctx.getSource(),
+                                    getInteger(ctx, "number"), getString(ctx, "name"))))))
+                .then(literal("delete")
+                    .then(argument("number", IntegerArgumentType.integer(1))
+                        .executes(ctx -> executeDeleteGroup(ctx.getSource(), getInteger(ctx, "number")))))
                 .then(literal("clear")
                     .executes(ctx -> executeClearGroup(ctx.getSource())))
         );
@@ -268,6 +295,14 @@ public final class PoiCommand {
         SharingCommands.register(dispatcher);
     }
 
+    // ── Menu ──────────────────────────────────────────────────────────────────
+
+    private static int executeMenu(FabricClientCommandSource source) {
+        // The chat screen closes after the command runs, so open on the next tick
+        PoiScreen.openNextTick();
+        return 1;
+    }
+
     // ── Help ──────────────────────────────────────────────────────────────────
 
     private static int executeWorldHelp(FabricClientCommandSource source) {
@@ -284,7 +319,7 @@ public final class PoiCommand {
         send(source, gray("  /world members        ") + "List members and their roles");
         send(source, gray("  /world leave          ") + "Leave a world someone shared with you");
         send(source, "");
-        send(source, gray("Run ") + "/poi help" + gray(" for POI and category commands."));
+        send(source, gray("Run ") + "/poi help" + gray(" for POI and group commands, or press I for the World tab."));
         return 1;
     }
 
@@ -295,17 +330,19 @@ public final class PoiCommand {
                        : cfg.isOffMode()    ? " §8[OFF]§r"
                        :                     " §e[OFFLINE]§r";
         send(source, header("Points of Interest — POI Management") + modeTag);
+        send(source, gray("  /poi menu                 ") + "Open the POI screen (or press I)");
         send(source, gray("  /poi status               ") + "Show storage mode and configuration");
         send(source, gray("  /poi offline              ") + "Switch to offline storage");
         send(source, gray("  /poi online               ") + "Switch to online storage (requires API key)");
-        send(source, gray("  /poi off                  ") + "Disable Points of Interest (hides arrows, blocks commands)");
+        send(source, gray("  /poi off                  ") + "Disable Points of Interest (hides labels, blocks commands)");
         send(source, gray("  /poi setkey <key>         ") + "Save API key, link this account, switch to online");
         send(source, gray("  /poi reset                ") + "Remove API key and return to offline mode");
         send(source, gray("  /poi download <key>       ") + "Download cloud data to local file");
         send(source, gray("  /poi list [page]          ") + "List POIs in current dimension");
         send(source, gray("  /poi list all [page]      ") + "List POIs in all dimensions");
         send(source, gray("  /poi list group <#> [page]") + "List POIs in a specific group");
-        send(source, gray("  /poi add <name> [desc]    ") + "Add POI (to current group if selected)");
+        send(source, gray("  /poi add <name> [desc]    ") + "Add a POI where you're standing (to the current group, if any)");
+        send(source, gray("  /poi move <#>             ") + "Move a POI to where you're standing");
         send(source, gray("  /poi delete <#>           ") + "Permanently delete a POI");
         send(source, gray("  /poi find <text>          ") + "List POIs containing text, closest first");
         send(source, gray("  /poi track                ") + "List all currently tracked POIs");
@@ -313,6 +350,7 @@ public final class PoiCommand {
         send(source, gray("  /poi untrack <#> [# ...]  ") + "Untrack one or more POIs");
         send(source, gray("  /poi track clear          ") + "Stop tracking all POIs");
         send(source, gray("  /poi campfires [on|off]   ") + "Name campfires to save them as Campsites");
+        send(source, gray("  /poi hud [on|off|left|right]") + " Show your position and group in a corner");
         send(source, gray("  /poi link                 ") + "Link this account now, showing any error (setkey tries too)");
         send(source, gray("  /poi unlink               ") + "Unlink this Minecraft account");
         send(source, "");
@@ -322,7 +360,7 @@ public final class PoiCommand {
         send(source, gray("  /untrack <#> [...] ") + "Shortcut for /poi untrack");
         send(source, gray("  /find <text>      ") + "Shortcut for /poi find");
         send(source, "");
-        send(source, gray("Run ") + "/world help" + gray(" or ") + "/group help" + gray(" for more."));
+        send(source, gray("Run ") + "/world help" + gray(" or ") + "/group help" + gray(" for more, or press I to do it all from a screen."));
         MutableComponent website = Component.literal("Website: ").withStyle(ChatFormatting.GRAY)
                 .append(urlComponent(baseUrl + HELP_PATH));
         sendComponent(source, website);
@@ -332,10 +370,13 @@ public final class PoiCommand {
     private static int executeGroupHelp(FabricClientCommandSource source) {
         send(source, header("Points of Interest — Group Management"));
         send(source, gray("  /group list [page]    ") + "List groups in current world");
-        send(source, gray("  /group add <name>      ") + "Create a new group");
-        send(source, gray("  /group select <#>     ") + "Select target group for new POIs");
-        send(source, gray("  /group clear          ") + "Deselect group (POIs added at root)");
+        send(source, gray("  /group add <name>     ") + "Create a group and select it");
+        send(source, gray("  /group select <#>     ") + "Select the group new POIs go into");
+        send(source, gray("  /group clear          ") + "Deselect it (new POIs go to Ungrouped)");
+        send(source, gray("  /group rename <#> <name>") + " Rename a group");
+        send(source, gray("  /group delete <#>     ") + "Delete a group (its POIs move to Ungrouped)");
         send(source, "");
+        send(source, gray("Opening a group in the screen's sidebar (press I) selects it too."));
         send(source, gray("Run ") + "/poi help" + gray(" for POI commands."));
         return 1;
     }
@@ -348,10 +389,9 @@ public final class PoiCommand {
             send(source, gray("Points of Interest is already disabled. Run /poi offline or /poi online to re-enable."));
             return 1;
         }
-        cfg.storageMode = "off";
-        cfg.save();
+        turnOff();
         send(source, ok("Points of Interest disabled."));
-        send(source, gray("  Direction arrows are hidden. Run /poi offline or /poi online to re-enable."));
+        send(source, gray("  Tracking labels are hidden. Run /poi offline or /poi online to re-enable."));
         return 1;
     }
 
@@ -359,10 +399,7 @@ public final class PoiCommand {
 
     private static int executeCampfires(FabricClientCommandSource source, Boolean enable) {
         PoiConfig cfg = PoiConfig.get();
-        if (enable != null) {
-            cfg.campfireCampsites = enable;
-            cfg.save();
-        }
+        if (enable != null) setCampfireCampsites(enable);
         if (cfg.campfireCampsites) {
             send(source, ok("Campfire campsites: ON"));
             send(source, gray("  Place a campfire, or right-click one with an empty hand, to name it."));
@@ -415,17 +452,11 @@ public final class PoiCommand {
     // ── /poi offline ───────────────────────────────────────────────────────────
 
     private static int executeOffline(FabricClientCommandSource source) {
-        PoiConfig cfg = PoiConfig.get();
-        cfg.storageMode    = "offline";
-        cfg.save();
-
-        Path dataFile = PoiStorageProvider.resolveDataFile(cfg);
+        Path dataFile = PoiStorageProvider.resolveDataFile(PoiConfig.get());
         MutableComponent msg = Component.literal(ok("Switched to OFFLINE mode.  Data file: "))
                 .append(fileLink(dataFile));
         sendComponent(source, msg);
-
-        // World IDs are backend-specific — re-establish the world from the offline file
-        reselectWorld(m -> send(source, m), "  ", false);
+        goOffline(m -> send(source, m), "  ");
         return 1;
     }
 
@@ -437,36 +468,98 @@ public final class PoiCommand {
             send(source, err("No API key set. Run /poi setkey <key> first."));
             return 0;
         }
-        cfg.storageMode    = "online";
-        cfg.save();
         send(source, ok("Switched to ONLINE mode."));
-
-        // World IDs are backend-specific — re-establish the world from the API
-        reselectWorld(m -> send(source, m), "  ", false);
+        goOnline(m -> send(source, m), "  ");
         return 1;
     }
 
     // ── /poi setkey ────────────────────────────────────────────────────────────
 
     private static int executeSetKey(FabricClientCommandSource source, String key) {
-        PoiConfig cfg = PoiConfig.get();
-        cfg.apiKey         = key.trim();
-        cfg.storageMode    = "online";
-        cfg.save();
         send(source, ok("API key saved. Switched to ONLINE mode."));
-        // Links this Minecraft account too, silently: a stale session just waits for a later join
-        SharingCommands.autoLink();
 
         // Show offline data file for reference (data is never lost on mode switch)
-        Path offlineFile = PoiStorageProvider.resolveDataFile(cfg);
+        Path offlineFile = PoiStorageProvider.resolveDataFile(PoiConfig.get());
         MutableComponent fileNote = Component.literal(gray("  Offline data: "))
                 .append(fileLink(offlineFile));
         sendComponent(source, fileNote);
         send(source, gray("  Run /poi offline to switch back at any time."));
 
-        // World IDs are backend-specific — re-establish the world from the API
-        reselectWorld(m -> send(source, m), "  ", false);
+        saveApiKey(key, m -> send(source, m), "  ");
         return 1;
+    }
+
+    // ── Settings shared by the commands and the settings screen ──────────────
+    // Each takes the feedback sink for the world reselection that follows a
+    // storage change, since world IDs are backend-specific. Game thread only.
+
+    /** Switches to offline storage and reselects the world from the offline file. */
+    public static void goOffline(Consumer<String> out, String prefix) {
+        PoiConfig cfg = PoiConfig.get();
+        cfg.storageMode = "offline";
+        cfg.save();
+        reselectWorld(out, prefix, false);
+    }
+
+    /** Switches to online storage. The caller checks that an API key is set. */
+    public static void goOnline(Consumer<String> out, String prefix) {
+        PoiConfig cfg = PoiConfig.get();
+        cfg.storageMode = "online";
+        cfg.save();
+        reselectWorld(out, prefix, false);
+    }
+
+    /** Turns Points of Interest off. Tracking labels hide and commands stop until a mode is chosen again. */
+    public static void turnOff() {
+        PoiConfig cfg = PoiConfig.get();
+        cfg.storageMode = "off";
+        cfg.save();
+    }
+
+    /**
+     * Saves an API key, switches online and links this Minecraft account (silently).
+     * Completes when the link attempt is done.
+     */
+    public static CompletableFuture<Void> saveApiKey(String key, Consumer<String> out, String prefix) {
+        PoiConfig cfg = PoiConfig.get();
+        cfg.apiKey      = key.trim();
+        cfg.storageMode = "online";
+        cfg.save();
+        reselectWorld(out, prefix, false);
+        // A stale session just waits for a later join
+        return SharingCommands.autoLink();
+    }
+
+    /** Removes the API key and switches to offline. Local data is never touched. */
+    public static void removeApiKey(Consumer<String> out, String prefix) {
+        PoiConfig cfg = PoiConfig.get();
+        cfg.apiKey = "";
+        goOffline(out, prefix);
+    }
+
+    public static void setCampfireCampsites(boolean enable) {
+        PoiConfig cfg = PoiConfig.get();
+        cfg.campfireCampsites = enable;
+        cfg.save();
+    }
+
+    /** "off", or the corner to show the HUD in: "left" or "right". */
+    public static void setHud(String setting) {
+        PoiConfig cfg = PoiConfig.get();
+        cfg.hudEnabled = !"off".equals(setting);
+        if (cfg.hudEnabled) cfg.hudCorner = setting;
+        cfg.save();
+    }
+
+    public static void setAutoSelectSharedWorlds(boolean enable) {
+        PoiConfig cfg = PoiConfig.get();
+        cfg.autoSelectSharedWorlds = enable;
+        cfg.save();
+    }
+
+    /** The site page that explains how to get an API key. */
+    public static String helpUrl() {
+        return PoiConfig.get().getApiBaseUrl() + HELP_PATH;
     }
 
     // ── /poi download ──────────────────────────────────────────────────────────
@@ -633,19 +726,33 @@ public final class PoiCommand {
         String place = getPlaceKey();
 
         async(source, () -> {
-            PoiStorage storage = PoiStorageProvider.get();
-            ApiModels.WorldSummary world = storage.createWorld(finalName, seed);
-
-            PoiConfig.get().bindWorld(place, world.id);
-            switchWorld(world.id);
-            SharingCommands.rememberServer(place, world);
-
+            ApiModels.WorldSummary world = createAndSelectWorld(finalName, seed, place);
             send(source, ok("World \"" + world.name + "\" created and selected."));
             if (!seed.isBlank()) {
                 send(source, gray("  Seed: " + seed));
             }
         });
         return 1;
+    }
+
+    /**
+     * Creates a POI world with this seed and selects it for {@code place}. Blocks on
+     * storage, so call it off the game thread.
+     */
+    public static ApiModels.WorldSummary createAndSelectWorld(String name, String seed, String place) throws Exception {
+        ApiModels.WorldSummary world = PoiStorageProvider.get().createWorld(name, seed);
+        PoiConfig.get().bindWorld(place, world.id);
+        switchWorld(world.id);
+        SharingCommands.rememberServer(place, world);
+        return world;
+    }
+
+    /** Makes {@code world} the selected world here, and binds it to this save or server. */
+    public static void selectWorld(ApiModels.WorldSummary world) {
+        String place = getPlaceKey();
+        PoiConfig.get().bindWorld(place, world.id);
+        switchWorld(world.id);
+        SharingCommands.rememberServer(place, world);
     }
 
     // ── World selection ────────────────────────────────────────────────────────
@@ -775,11 +882,7 @@ public final class PoiCommand {
             return 0;
         }
 
-        String place = getPlaceKey();
-        PoiConfig.get().bindWorld(place, world.id);
-        switchWorld(world.id);
-        SharingCommands.rememberServer(place, world);
-
+        selectWorld(world);
         send(source, ok("Selected: " + world.name));
         String currentSeed = getCurrentSeed();
         if (currentSeed != null && world.seed != null && !world.seed.isBlank()
@@ -823,19 +926,12 @@ public final class PoiCommand {
             return 1;
         }
 
-        boolean wasOnline = cfg.isOnlineMode();
-        cfg.apiKey         = "";
-        cfg.storageMode    = "offline";
-        cfg.save();
-
-        if (wasOnline) {
+        if (cfg.isOnlineMode()) {
             send(source, ok("API key removed. Switched to OFFLINE mode."));
         } else {
             send(source, ok("Switched to OFFLINE mode."));
         }
-
-        // Re-establish world context from the offline file (online IDs are not valid there)
-        reselectWorld(m -> send(source, m), "  ", false);
+        removeApiKey(m -> send(source, m), "  ");
         return 1;
     }
 
@@ -937,7 +1033,7 @@ public final class PoiCommand {
         cfg.currentGroupId   = null;
         cfg.currentGroupName = null;
         cfg.save();
-        send(source, ok("Group focus cleared. POIs will be added at the root level."));
+        send(source, ok("Group cleared. New POIs go to Ungrouped."));
         return 1;
     }
 
@@ -1100,8 +1196,15 @@ public final class PoiCommand {
             List<ApiModels.WorldItem> items = storage.listItems(worldId);
             // The selection may have changed while the list was loading
             if (!worldId.equals(PoiConfig.get().currentWorldId)) return;
-            PoiSession.get().setLastPoiList(flattenPois(items));
+            List<ApiModels.WorldItem> pois = flattenPois(items);
+            PoiSession.get().setLastPoiList(pois);
             CampsiteIndex.rebuild(worldId, items);
+            // Point tracked POIs at the fresh copies, so labels follow moves and renames
+            for (ApiModels.WorldItem tracked : PoiSession.get().getTrackedPois()) {
+                if (tracked.id == null) continue;
+                pois.stream().filter(p -> tracked.id.equals(p.id)).findFirst()
+                        .ifPresent(PoiSession.get()::addTrackedPoi);
+            }
         } catch (Exception ignored) {}
     }
 
@@ -1190,6 +1293,134 @@ public final class PoiCommand {
         return 1;
     }
 
+    // ── /poi move ─────────────────────────────────────────────────────────────
+
+    private static int executeMove(FabricClientCommandSource source, int number) {
+        if (!checkReady(source)) return 0;
+        String worldId = requireCurrentWorld(source);
+        if (worldId == null) return 0;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) {
+            send(source, err("Cannot determine player position."));
+            return 0;
+        }
+        ApiModels.WorldItem poi = PoiSession.get().getPoiByNumber(number);
+        if (poi == null) {
+            int count = PoiSession.get().poiCount();
+            send(source, err(count == 0 ? "No POIs loaded yet. Run /poi list first." : "Invalid number. Choose 1–" + count + "."));
+            return 0;
+        }
+        double x = Math.floor(mc.player.getX());
+        double y = Math.floor(mc.player.getY());
+        double z = Math.floor(mc.player.getZ());
+        String dimension = getDimension(mc);
+
+        async(source, () -> {
+            PoiStorage storage = PoiStorageProvider.get();
+            if (isCampsite(storage.listItems(worldId), poi.id)) {
+                send(source, err("Campsites stay at their campfire. Break it and place a new one to move it."));
+                return;
+            }
+            storage.movePoi(worldId, poi.id, x, y, z, dimension);
+            refreshPoiList(storage, worldId);
+            send(source, ok("Moved " + poi.name + " here."));
+            send(source, gray("  " + formatCoords(x, y, z) + " — " + dimensionLabel(dimension)));
+        });
+        return 1;
+    }
+
+    /** Whether this POI is in the campsite group, which campfires manage. */
+    public static boolean isCampsite(List<ApiModels.WorldItem> items, String poiId) {
+        ApiModels.WorldItem group = CampsiteIndex.findGroup(items);
+        return group != null && group.items != null && group.items.stream().anyMatch(p -> poiId.equals(p.id));
+    }
+
+    // ── /poi hud ──────────────────────────────────────────────────────────────
+
+    private static int executeHud(FabricClientCommandSource source, String setting) {
+        PoiConfig cfg = PoiConfig.get();
+        if (setting != null) setHud("on".equals(setting) ? cfg.hudCorner : setting);
+        send(source, ok("HUD: " + (cfg.hudEnabled ? "ON, top " + cfg.hudCorner : "OFF")));
+        if (setting == null) send(source, gray("  /poi hud on|off, or left|right to pick the corner"));
+        return 1;
+    }
+
+    // ── /group rename, /group delete ──────────────────────────────────────────
+
+    private static ApiModels.WorldItem groupByNumber(FabricClientCommandSource source, int number) {
+        ApiModels.WorldItem group = PoiSession.get().getGroupByNumber(number);
+        if (group == null) {
+            int count = PoiSession.get().groupCount();
+            send(source, err(count == 0 ? "No groups loaded yet. Run /group list first." : "Invalid number. Choose 1–" + count + "."));
+        }
+        return group;
+    }
+
+    private static int executeRenameGroup(FabricClientCommandSource source, int number, String name) {
+        if (!checkReady(source)) return 0;
+        String worldId = requireCurrentWorld(source);
+        if (worldId == null) return 0;
+        ApiModels.WorldItem group = groupByNumber(source, number);
+        if (group == null) return 0;
+        String newName = stripQuotes(name);
+        if (newName.isBlank()) {
+            send(source, err("Please give the group a name."));
+            return 0;
+        }
+        async(source, () -> {
+            PoiStorage storage = PoiStorageProvider.get();
+            List<ApiModels.WorldItem> items = storage.listItems(worldId);
+            if (CampsiteIndex.isCampsiteGroup(items, findById(items, group.id))) {
+                send(source, err("The Campsites group can't be renamed."));
+                return;
+            }
+            storage.renameGroup(worldId, group.id, newName);
+            PoiConfig cfg = PoiConfig.get();
+            if (group.id.equals(cfg.currentGroupId)) {
+                cfg.currentGroupName = newName;
+                cfg.save();
+            }
+            refreshPoiList(storage, worldId);
+            send(source, ok("Renamed " + group.name + " to " + newName + "."));
+        });
+        return 1;
+    }
+
+    private static int executeDeleteGroup(FabricClientCommandSource source, int number) {
+        if (!checkReady(source)) return 0;
+        String worldId = requireCurrentWorld(source);
+        if (worldId == null) return 0;
+        ApiModels.WorldItem group = groupByNumber(source, number);
+        if (group == null) return 0;
+        async(source, () -> {
+            PoiStorage storage = PoiStorageProvider.get();
+            List<ApiModels.WorldItem> items = storage.listItems(worldId);
+            if (CampsiteIndex.isCampsiteGroup(items, findById(items, group.id))) {
+                send(source, err("The Campsites group can't be deleted. Turn campfires off with /poi campfires off."));
+                return;
+            }
+            storage.deleteGroup(worldId, group.id);
+            forgetCurrentGroup(group.id);
+            refreshPoiList(storage, worldId);
+            send(source, ok("Deleted the group " + group.name + ". Its POIs are now ungrouped."));
+        });
+        return 1;
+    }
+
+    /** Clears the /group select choice if it was this group. */
+    public static void forgetCurrentGroup(String groupId) {
+        PoiConfig cfg = PoiConfig.get();
+        if (groupId.equals(cfg.currentGroupId)) {
+            cfg.currentGroupId = null;
+            cfg.currentGroupName = null;
+            cfg.save();
+        }
+    }
+
+    private static ApiModels.WorldItem findById(List<ApiModels.WorldItem> items, String id) {
+        return items.stream().filter(i -> id.equals(i.id)).findFirst().orElse(null);
+    }
+
     // ── /poi delete ───────────────────────────────────────────────────────────
 
     private static int executeDelete(FabricClientCommandSource source, int number) {
@@ -1264,18 +1495,11 @@ public final class PoiCommand {
             }
             return 0;
         }
-        if (poi.coords == null || poi.coords.x == null || poi.coords.z == null) {
+        if (!canTrack(poi)) {
             send(source, err("POI has no coordinates and cannot be tracked."));
             return 0;
         }
-        PoiSession.get().addTrackedPoi(poi);
-        if (poi.id != null) {
-            PoiConfig cfg = PoiConfig.get();
-            if (!cfg.getTrackedPoiIds().contains(poi.id)) {
-                cfg.getTrackedPoiIds().add(poi.id);
-                cfg.save();
-            }
-        }
+        track(poi);
         send(source, ok("Now tracking: " + poi.name));
         send(source, gray("  " + formatCoords(poi.coords) + " — " + dimensionLabel(poi.dimension)));
         return 1;
@@ -1296,12 +1520,7 @@ public final class PoiCommand {
             send(source, err(poi.name + " is not currently tracked."));
             return 0;
         }
-        PoiSession.get().removeTrackedPoi(number);
-        if (poi.id != null) {
-            PoiConfig cfg = PoiConfig.get();
-            cfg.getTrackedPoiIds().remove(poi.id);
-            cfg.save();
-        }
+        untrack(poi);
         send(source, ok("Stopped tracking: " + poi.name));
         return 1;
     }
@@ -1345,12 +1564,44 @@ public final class PoiCommand {
     }
 
     private static int executeTrackClear(FabricClientCommandSource source) {
+        clearTracking();
+        send(source, ok("All tracking cleared."));
+        return 1;
+    }
+
+    /** Whether a POI has the coordinates it needs to be tracked. */
+    public static boolean canTrack(ApiModels.WorldItem poi) {
+        return poi.coords != null && poi.coords.x != null && poi.coords.z != null;
+    }
+
+    /** Tracks a POI and remembers it for this world, so it is restored on the next join. */
+    public static void track(ApiModels.WorldItem poi) {
+        PoiSession.get().addTrackedPoi(poi);
+        if (poi.id != null) {
+            PoiConfig cfg = PoiConfig.get();
+            if (!cfg.getTrackedPoiIds().contains(poi.id)) {
+                cfg.getTrackedPoiIds().add(poi.id);
+                cfg.save();
+            }
+        }
+    }
+
+    /** Stops tracking a POI and forgets it for this world. */
+    public static void untrack(ApiModels.WorldItem poi) {
+        PoiSession.get().removeTrackedPoi(poi);
+        if (poi.id != null) {
+            PoiConfig cfg = PoiConfig.get();
+            cfg.getTrackedPoiIds().remove(poi.id);
+            cfg.save();
+        }
+    }
+
+    /** Stops tracking every POI. */
+    public static void clearTracking() {
         PoiSession.get().clearTrackedPois();
         PoiConfig cfg = PoiConfig.get();
         cfg.getTrackedPoiIds().clear();
         cfg.save();
-        send(source, ok("All tracking cleared."));
-        return 1;
     }
 
     // ── /poi find ─────────────────────────────────────────────────────────────
@@ -1490,7 +1741,7 @@ public final class PoiCommand {
      * Returns the current level seed as a string, or null if unavailable
      * (e.g. on a remote server that hides the seed).
      */
-    private static String getCurrentSeed() {
+    public static String getCurrentSeed() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.hasSingleplayerServer() && mc.getSingleplayerServer() != null) {
             long seed = mc.getSingleplayerServer().overworld().getSeed();
@@ -1504,7 +1755,7 @@ public final class PoiCommand {
      * which its POI world is remembered. Returns null when there is nothing stable
      * to key on.
      */
-    static String getPlaceKey() {
+    public static String getPlaceKey() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.hasSingleplayerServer() && mc.getSingleplayerServer() != null) {
             // The seed is part of the key so that a new world created under a
@@ -1544,7 +1795,7 @@ public final class PoiCommand {
         return a;
     }
 
-    private static String getWorldName() {
+    public static String getWorldName() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.hasSingleplayerServer() && mc.getSingleplayerServer() != null) {
             return mc.getSingleplayerServer().getWorldData().getLevelName();
@@ -1555,7 +1806,7 @@ public final class PoiCommand {
         return "New World";
     }
 
-    private static String getDimension(Minecraft mc) {
+    public static String getDimension(Minecraft mc) {
         if (mc.player == null) return "overworld";
         var dim = mc.player.level().dimension();
         if (dim.equals(Level.NETHER)) return "nether";
@@ -1627,7 +1878,7 @@ public final class PoiCommand {
         return s;
     }
 
-    private static String dimensionLabel(String dim) {
+    public static String dimensionLabel(String dim) {
         if (dim == null) return "Overworld";
         return switch (dim) {
             case "nether" -> "Nether";
