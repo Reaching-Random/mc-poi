@@ -1,0 +1,9 @@
+Offline mode, the default, makes no network requests. Online mode starts when you run /poi setkey with an API key from reachingrandom.com, and the mod then talks to reachingrandom.com:
+
+- Every request sends your API key, plus the POI data you work with: world names and seeds, POIs, groups and campsites.
+- When an owner or admin selects a shared world on a multiplayer server, the mod saves that server's address on the world so other members' mods can select it.
+- /world share sends the Minecraft names and UUIDs of the players you invite.
+- /poi setkey, and joining a world with an account that isn't linked yet, link your Minecraft account. The mod sends your Minecraft name and UUID. To prove the account is yours, it asks Mojang's session server (sessionserver.mojang.com) to record a sign-in with a one-time code, the same check a Minecraft server makes when you join. Your password and access token are never sent to reachingrandom.com.
+- In the background it checks whether the selected world has changed and whether invites are waiting, as often as reachingrandom.com asks but never more than once every 15 seconds.
+
+Privacy policy: https://reachingrandom.com/privacy
