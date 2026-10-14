@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The corner overlay: your block position, and the group /poi add uses
+ * The corner overlay: your block position and facing (N, NE, …), and the group /poi add uses
  * when one is selected. Off by default; /poi hud or Settings turns it on. Hidden with
  * the rest of the HUD (F1) and with the F3 debug screen.
  */
@@ -40,7 +40,8 @@ public final class PoiHud {
         if (mc.gui.hud.isHidden() || mc.debugEntries.isOverlayVisible()) return;
 
         List<String> lines = new ArrayList<>();
-        lines.add(mc.player.getBlockX() + ", " + mc.player.getBlockY() + ", " + mc.player.getBlockZ());
+        lines.add(mc.player.getBlockX() + ", " + mc.player.getBlockY() + ", " + mc.player.getBlockZ()
+                + "  " + facing(mc.player.getYRot()));
         if (cfg.currentGroupId != null) {
             lines.add("Group: " + (cfg.currentGroupName != null ? cfg.currentGroupName : "selected"));
         }
@@ -66,6 +67,15 @@ public final class PoiHud {
             y += LINE_HEIGHT;
         }
         g.pose().popMatrix();
+    }
+
+    /** Compass points in 45° steps, starting at yaw 0, which faces south (+Z). */
+    private static final String[] FACINGS = {"S", "SW", "W", "NW", "N", "NE", "E", "SE"};
+
+    /** The compass point nearest the way the player faces. */
+    static String facing(float yaw) {
+        int step = Math.round(Math.floorMod(Math.round(yaw), 360) / 45f) % 8;
+        return FACINGS[step];
     }
 
     /** How far down the effect icons reach: one row for good effects, one for bad. */
